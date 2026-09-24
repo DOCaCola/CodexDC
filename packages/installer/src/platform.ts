@@ -29,7 +29,7 @@ export interface CodexInstall {
   metaPath: string | null;
   /** Path to the Electron Framework binary (for fuse flipping). */
   electronBinary: string;
-  /** Original-name executable used when launching. */
+  /** Desktop executable, excluding the managed macOS launch wrapper. */
   executable: string;
   /** Human-readable app name, when available. */
   appName: string;
@@ -81,6 +81,9 @@ function locateMac(override?: string): CodexInstall {
   }
   const info = readMacAppInfo(appRoot);
   const resourcesDir = join(appRoot, "Contents", "Resources");
+  const executable = info.bundleId === "io.github.docacola.codexdc"
+    ? JSON.parse(readFileSync(join(resourcesDir, "codexdc-launch.json"), "utf8")).originalExecutable
+    : info.executable;
   return {
     appRoot,
     resourcesDir,
@@ -95,7 +98,7 @@ function locateMac(override?: string): CodexInstall {
       "A",
       "Electron Framework",
     ),
-    executable: join(appRoot, "Contents", "MacOS", info.executable),
+    executable: join(appRoot, "Contents", "MacOS", executable),
     appName: info.name,
     bundleId: info.bundleId,
     channel: inferCodexChannel(info.bundleId, info.name),

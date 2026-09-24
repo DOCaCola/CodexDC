@@ -9,9 +9,9 @@ open Codex-native windows.
 
 | Platform | Directory |
 |---|---|
-| macOS | `~/Library/Application Support/codexdc/tweaks/` |
-| Linux | `~/.local/share/codexdc/tweaks/` |
-| Windows | `%APPDATA%/codexdc/tweaks/` |
+| macOS | `~/Library/Application Support/codex-dc/tweaks/` |
+| Linux | `~/.local/share/codex-dc/tweaks/` |
+| Windows | `%APPDATA%/codex-dc/tweaks/` |
 
 CodexDC watches this directory and hot-reloads when files change. You can also
 reload from Settings -> Tweaks or restart Codex.

@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import os, { tmpdir } from "node:os";
+import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
 import test from "node:test";
+import { writePlist } from "../src/plist";
+import { matchesCodexMainExecutable } from "../src/commands/debug";
 import {
   hasUsableWindowsStoreMirror,
   inferCodexChannel,
@@ -18,6 +21,36 @@ test("inferCodexChannel detects stable and beta metadata", () => {
   assert.equal(inferCodexChannel("com.openai.codex.beta", "Codex (Beta)"), "beta");
   assert.equal(inferCodexChannel(null, "Codex (Beta)"), "beta");
   assert.equal(inferCodexChannel(null, "ChatGPT"), "stable");
+});
+
+test("managed macOS process detection follows the desktop executable behind the launcher", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "codexdc-mac-process-"));
+  t.mock.method(os, "platform", () => "darwin");
+  syncBuiltinESMExports();
+  try {
+    const app = join(root, "CodexDC.app");
+    const resources = join(app, "Contents", "Resources");
+    const executables = join(app, "Contents", "MacOS");
+    mkdirSync(resources, { recursive: true });
+    mkdirSync(executables, { recursive: true });
+    writePlist(join(app, "Contents", "Info.plist"), {
+      CFBundleName: "CodexDC",
+      CFBundleIdentifier: "io.github.docacola.codexdc",
+      CFBundleExecutable: "Codex",
+    });
+    writeFileSync(join(resources, "codexdc-launch.json"), JSON.stringify({ originalExecutable: "Codex-original" }));
+    writeFileSync(join(executables, "Codex"), "");
+    writeFileSync(join(executables, "Codex-original"), "");
+    const codex = locateCodex(app);
+    assert.equal(codex.executable, join(executables, "Codex-original"));
+    assert.equal(matchesCodexMainExecutable(codex, `${codex.executable} --some-option`), true);
+    assert.equal(matchesCodexMainExecutable(codex, join(executables, "Codex")), false);
+    assert.equal(matchesCodexMainExecutable(codex, `${codex.executable}-helper`), false);
+  } finally {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("Windows app metadata selects ChatGPT.exe and preserves Codex.exe fallback", () => {

@@ -1,4 +1,4 @@
-export const CODEXDC_VERSION = "1.0.1";
+export const CODEXDC_VERSION = "1.0.2";
 
 const SEMVER_RE = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/;
 
