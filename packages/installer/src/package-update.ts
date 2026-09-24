@@ -59,7 +59,7 @@ export async function updatePackage(opts: Opts = {}): Promise<void> {
     if (oldInstall) {
       cpSync(paths.runtime, join(work, "old-runtime"), { recursive: true });
       try {
-        execFileSync(node, [cli, "repair", "--quiet"], {
+        execFileSync(node, [cli, "repair", "--force", "--quiet"], {
           cwd: next, env: { ...process.env, CODEXDC_HOME: paths.root, CODEXDC_ACTIVATING: "1" }, timeout: 10 * 60_000, windowsHide: true,
         });
       } catch (error) {

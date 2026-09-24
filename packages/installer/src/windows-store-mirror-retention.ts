@@ -79,7 +79,7 @@ export function removeWindowsStoreMirror(
   }
 }
 
-function managedStorePackageRoot(appRoot: string): string | null {
+export function managedStorePackageRoot(appRoot: string): string | null {
   const normalizedAppRoot = resolve(appRoot);
   const packageRoot = basename(normalizedAppRoot).toLowerCase() === "app"
     ? dirname(normalizedAppRoot)

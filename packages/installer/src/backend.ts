@@ -64,6 +64,23 @@ export async function checkBackend(): Promise<{ tag: string; url: string; asset:
   return { tag: release.tag_name, url: release.html_url, asset: asset.name };
 }
 
+export function validateBackendPackage(root: string, platform = process.platform): string {
+  const manifest = JSON.parse(readFileSync(join(root, "codex-package.json"), "utf8"));
+  const target = platform === "win32" ? "x86_64-pc-windows-msvc" : "aarch64-apple-darwin";
+  const extension = platform === "win32" ? ".exe" : "";
+  const entrypoint = `bin/codex${extension}`;
+  if (manifest.layoutVersion !== 1 || manifest.target !== target || manifest.entrypoint !== entrypoint ||
+      manifest.resourcesDir !== "codex-resources" || manifest.pathDir !== "codex-path") {
+    throw new Error("Unsupported CLI package layout or target");
+  }
+  const required = [entrypoint, `bin/hpatch${extension}`, `bin/codex-code-mode-host${extension}`, `codex-path/rg${extension}`];
+  if (platform === "win32") required.push("codex-resources/codex-command-runner.exe", "codex-resources/codex-windows-sandbox-setup.exe");
+  for (const file of required) {
+    if (!existsSync(join(root, file))) throw new Error(`Incomplete CLI package: missing ${file}`);
+  }
+  return join(root, entrypoint);
+}
+
 /** Checks app-server startup in a disposable home; never starts a user task. */
 export async function probeBackend(executable: string): Promise<string> {
   const home = mkdtempSync(join(tmpdir(), "codexdc-cli-probe-"));
@@ -127,7 +144,7 @@ export async function installBackend(root = userPaths().root): Promise<BackendSt
     const unpacked = join(work, "package");
     await extractPackage(archive, unpacked);
     const relativeExe = join("bin", process.platform === "win32" ? "codex.exe" : "codex");
-    const version = await probeBackend(join(unpacked, relativeExe));
+    const version = await probeBackend(validateBackendPackage(unpacked));
     const destination = join(root, "cli", `${release.id}-${process.platform}-${process.arch}-${digest.slice(0, 12)}`);
     if (!existsSync(destination)) renameSync(unpacked, destination);
     const state = backendState(root);

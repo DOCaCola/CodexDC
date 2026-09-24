@@ -31,7 +31,7 @@ import {
 import { chownForTargetUser } from "../ownership.js";
 import { getOpenReport, type OpenReport } from "./debug.js";
 import { openCodex, quitCodex } from "../alerts.js";
-import { pruneWindowsStoreMirrors } from "../windows-store-mirror-retention.js";
+import { managedStorePackageRoot, pruneWindowsStoreMirrors } from "../windows-store-mirror-retention.js";
 
 interface Opts {
   app?: string;
@@ -56,7 +56,7 @@ export async function install(opts: Opts = {}): Promise<void> {
 
   const step = makeStepper({ quiet: opts.quiet === true, verbose: opts.verbose === true });
   const codex = locateCodex(opts.app);
-  if (codex.platform === "win32" && !codex.appRoot.toLowerCase().includes("codexdc")) throw new Error("Refusing to patch an unmanaged Windows installation.");
+  if (codex.platform === "win32" && !managedStorePackageRoot(codex.appRoot)) throw new Error("Refusing to patch an unmanaged Windows installation.");
   const hasPatchMarker = hasCodexPlusPlusAsarMarker(codex.asarPath);
   const { headerHash: originalAsarHash } = readHeaderHash(codex.asarPath);
   const integrityPlan = prepareIntegrityUpdate(codex, originalAsarHash, {

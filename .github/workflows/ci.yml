@@ -33,6 +33,7 @@ jobs:
       - run: npm test
       - run: npm audit --omit=dev --audit-level=high
       - run: npm run package
+      - run: node scripts/smoke-package.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: CodexDC-${{ matrix.target }}
