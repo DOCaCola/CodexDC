@@ -1,7 +1,7 @@
 # Getting Started
 
 A tweak is a JavaScript package loaded from the CodexDC tweaks directory. Tweaks
-can add settings UI, adjust Codex's renderer DOM, run Electron main-process
+can add settings UI, adjust Codex's renderer DOM, run Owl main-process
 code, communicate between renderer and main, store data, expose MCP servers, and
 open Codex-native windows.
 

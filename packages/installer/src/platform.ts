@@ -27,8 +27,6 @@ export interface CodexInstall {
   asarPath: string;
   /** Path to Info.plist (mac) or equivalent metadata file. */
   metaPath: string | null;
-  /** Path to the Electron Framework binary (for fuse flipping). */
-  electronBinary: string;
   /** Desktop executable, excluding the managed macOS launch wrapper. */
   executable: string;
   /** Human-readable app name, when available. */
@@ -73,7 +71,7 @@ function locateMac(override?: string): CodexInstall {
   if (!appRoot) {
     throw new Error(
       `[!] Codex App Not Found\n\n` +
-        `Ensure Codex.app or Codex (Beta).app is installed in /Applications or ~/Applications.\n` +
+        `Ensure the Codex desktop (Codex.app or ChatGPT.app) is installed in /Applications or ~/Applications.\n` +
         `Tried:\n  ${unique(candidates).join("\n  ")}\n\n` +
         `If Codex is somewhere else, rerun with:\n` +
         `  codexdc install --app /path/to/Codex.app`,
@@ -89,15 +87,6 @@ function locateMac(override?: string): CodexInstall {
     resourcesDir,
     asarPath: join(resourcesDir, "app.asar"),
     metaPath: join(appRoot, "Contents", "Info.plist"),
-    electronBinary: join(
-      appRoot,
-      "Contents",
-      "Frameworks",
-      "Electron Framework.framework",
-      "Versions",
-      "A",
-      "Electron Framework",
-    ),
     executable: join(appRoot, "Contents", "MacOS", executable),
     appName: info.name,
     bundleId: info.bundleId,
@@ -106,12 +95,17 @@ function locateMac(override?: string): CodexInstall {
   };
 }
 
-function findMacCodexApps(dir: string): string[] {
+export function findMacCodexApps(dir: string): string[] {
   if (!existsSync(dir)) return [];
   try {
     return readdirSync(dir)
-      .filter((name) => /\.app$/i.test(name) && /\bcodex\b/i.test(name))
-      .map((name) => join(dir, name));
+      .filter((name) => /\.app$/i.test(name))
+      .map((name) => join(dir, name))
+      .filter((app) => existsSync(join(app, "Contents", "Resources", "app.asar")))
+      .filter((app) => {
+        const { bundleId } = readMacAppInfo(app);
+        return bundleId === "com.openai.codex" || bundleId === "com.openai.codex.beta";
+      });
   } catch {
     return [];
   }
@@ -153,7 +147,7 @@ export function inferCodexChannel(bundleId: string | null, appName?: string): Co
 
 function locateWin(override?: string): CodexInstall {
   // Squirrel.Windows commonly installs under %LOCALAPPDATA%\codex\app-<version>.
-  // Some Electron installers use %LOCALAPPDATA%\Programs\Codex instead.
+  // Some desktop installers use %LOCALAPPDATA%\Programs\Codex instead.
   const local = process.env.LOCALAPPDATA;
   const programFiles = process.env.ProgramFiles;
   const programFilesX86 = process.env["ProgramFiles(x86)"];
@@ -241,7 +235,6 @@ function locateWin(override?: string): CodexInstall {
     resourcesDir,
     asarPath: join(resourcesDir, "app.asar"),
     metaPath: null,
-    electronBinary: executable,
     executable,
     appName,
     appUserModelId,
@@ -454,7 +447,7 @@ function findWindowsStoreCodexInstalls(): { name: string; installLocation: strin
 
 function locateLinux(override?: string): CodexInstall {
   // Linux builds are distributed by community ports today. Support unpacked
-  // Electron installs from deb/rpm packages as well as user-local symlinked
+  // Desktop installs from deb/rpm packages as well as user-local symlinked
   // installs used by am-will/codex-app.
   const candidates = [
     override,
@@ -490,7 +483,6 @@ function locateLinux(override?: string): CodexInstall {
     resourcesDir,
     asarPath: join(resourcesDir, "app.asar"),
     metaPath: null,
-    electronBinary: executable,
     executable,
     appName: "Codex",
     bundleId: null,

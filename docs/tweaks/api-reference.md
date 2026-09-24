@@ -506,7 +506,7 @@ Available in renderer and main. Renderer calls are proxied to the main process
 where required.
 
 These APIs depend on Codex window services exposed by the patch. They may need
-runtime updates when upstream Codex changes its Owl/Electron internals. See
+runtime updates when upstream Codex changes its Owl internals. See
 [Owl runtime surface](../OWL-RUNTIME.md) for the private upstream APIs CodexDC
 currently observes.
 
@@ -516,7 +516,7 @@ compatibility. Prefer the namespaced APIs for new tweaks.
 ## `CodexRuntimeType`
 
 ```ts
-type CodexRuntimeType = "owl" | "electron" | "unknown";
+type CodexRuntimeType = "owl" | "unknown";
 ```
 
 ## `CodexRuntimeInfo`
@@ -850,7 +850,7 @@ Fields:
 | `hostId` | Defaults to `local`. |
 | `show` | Defaults to `true`. |
 | `appearance` | Defaults to `secondary`. Passed through to Codex window services. |
-| `parentWindowId` | Optional Electron BrowserWindow id. Defaults to focused window when available. |
+| `parentWindowId` | Optional host BrowserWindow id. Defaults to focused window when available. |
 | `bounds` | Optional screen coordinates. |
 
 Example:
@@ -875,9 +875,9 @@ interface CodexCreateViewOptions {
 }
 ```
 
-Creates an Electron `BrowserView` registered with Codex's host context. The
-return type is `unknown` so renderer-only bundles do not need Electron types.
-Use only from main-process code that understands Electron.
+Creates an Owl `BrowserView` registered with Codex's host context. The
+return type is `unknown` so renderer-only bundles do not need host API types.
+Use only from main-process code that understands the Owl host API.
 
 ## `CodexWindowRef`
 

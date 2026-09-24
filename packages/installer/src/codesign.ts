@@ -1,6 +1,6 @@
 /**
- * Code signing on macOS. After we mutate Info.plist or the Electron Framework
- * binary, the original signature is invalid. Re-signing with a stable local
+ * Code signing on macOS. After we mutate Info.plist or native
+ * binaries, the original signature is invalid. Re-signing with a stable local
  * identity keeps macOS privacy permissions attached to the patched app across
  * CodexDC repair runs on the same machine.
  *

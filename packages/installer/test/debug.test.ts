@@ -24,10 +24,6 @@ test("detectRuntime reports owl when the Codex framework is present", () => {
     mkdirSync(join(codex.appRoot, "Contents", "Frameworks", "Codex Framework.framework"), {
       recursive: true,
     });
-    mkdirSync(
-      join(codex.appRoot, "Contents", "Frameworks", "Electron Framework.framework"),
-      { recursive: true },
-    );
     writeFileSync(codex.asarPath, "");
 
     const runtime = detectRuntime(codex);
@@ -38,19 +34,14 @@ test("detectRuntime reports owl when the Codex framework is present", () => {
   }
 });
 
-test("detectRuntime reports electron for an asar Electron app", () => {
+test("detectRuntime reports unknown when the Codex framework is absent", () => {
   const root = mkdtempSync(join(tmpdir(), "codexpp-debug-"));
   try {
     const codex = fakeMacCodex(root);
-    mkdirSync(
-      join(codex.appRoot, "Contents", "Frameworks", "Electron Framework.framework"),
-      { recursive: true },
-    );
     writeFileSync(codex.asarPath, "");
 
     const runtime = detectRuntime(codex);
-    assert.equal(runtime.type, "electron");
-    assert.ok(runtime.evidence.some((item) => item.includes("Electron Framework.framework")));
+    assert.equal(runtime.type, "unknown");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -180,15 +171,6 @@ function fakeMacCodex(root: string): CodexInstall {
     resourcesDir,
     asarPath: join(resourcesDir, "app.asar"),
     metaPath: join(appRoot, "Contents", "Info.plist"),
-    electronBinary: join(
-      appRoot,
-      "Contents",
-      "Frameworks",
-      "Electron Framework.framework",
-      "Versions",
-      "A",
-      "Electron Framework",
-    ),
     executable: join(appRoot, "Contents", "MacOS", "Codex"),
     appName: "Codex",
     bundleId: "com.openai.codex",

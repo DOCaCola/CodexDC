@@ -63,7 +63,7 @@ runtime compatibility.
 | Scope | Loaded in | Typical use |
 |---|---|---|
 | `renderer` | Renderer preload | Settings UI, DOM changes, keyboard shortcuts, React fiber inspection. |
-| `main` | Electron main process | Native integration, long-running tasks, filesystem work, IPC handlers, MCP sync. |
+| `main` | Owl main process | Native integration, long-running tasks, filesystem work, IPC handlers, MCP sync. |
 | `both` | Both processes | Renderer UI backed by main handlers. Branch on `api.process`. |
 
 Set `scope` explicitly. Missing `scope` currently loads in both processes because

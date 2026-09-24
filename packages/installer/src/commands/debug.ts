@@ -11,7 +11,7 @@ export interface DebugOpts {
   app?: string;
 }
 
-type RuntimeType = "electron" | "owl" | "unknown";
+type RuntimeType = "owl" | "unknown";
 type OpenStatus = "open" | "inactive" | "background" | "closed" | "unknown";
 
 export interface DebugReport {
@@ -94,29 +94,18 @@ export function detectRuntime(codex: CodexInstall): RuntimeReport {
   if (codex.platform === "darwin") {
     const owlFramework = join(codex.appRoot, "Contents", "Frameworks", "Codex Framework.framework");
     const owlExecutable = join(codex.resourcesDir, "codex");
-    const electronFramework = join(
-      codex.appRoot,
-      "Contents",
-      "Frameworks",
-      "Electron Framework.framework",
-    );
-
     if (existsSync(owlFramework)) evidence.push(`found ${owlFramework}`);
     if (existsSync(owlExecutable)) evidence.push(`found ${owlExecutable}`);
-    if (existsSync(electronFramework)) evidence.push(`found ${electronFramework}`);
     if (existsSync(codex.asarPath)) evidence.push(`found ${codex.asarPath}`);
 
     if (existsSync(owlFramework)) return { type: "owl", evidence };
-    if (existsSync(electronFramework) || existsSync(codex.asarPath)) {
-      return { type: "electron", evidence };
-    }
     return { type: "unknown", evidence };
   }
 
   if (existsSync(codex.asarPath)) evidence.push(`found ${codex.asarPath}`);
-  if (existsSync(codex.electronBinary)) evidence.push(`found ${codex.electronBinary}`);
+  if (existsSync(codex.executable)) evidence.push(`found ${codex.executable}`);
   return {
-    type: existsSync(codex.asarPath) ? "electron" : "unknown",
+    type: existsSync(codex.asarPath) ? "owl" : "unknown",
     evidence,
   };
 }
@@ -534,7 +523,6 @@ function printDataPaths(title: string, paths: DataPath[]): void {
 }
 
 function runtimeTypeLabel(type: RuntimeType): string {
-  if (type === "electron") return kleur.green("electron");
   if (type === "owl") return kleur.cyan("owl");
   return kleur.yellow("unknown");
 }

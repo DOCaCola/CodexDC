@@ -26,7 +26,6 @@ import { capKnownLogFiles } from "./logging.js";
 
 interface InstallCliOpts {
   app?: string;
-  fuse?: boolean;
   resign?: boolean;
   local?: boolean;
   localSigning?: boolean;
@@ -122,7 +121,6 @@ prog
   .command("install")
   .describe("Install a separate managed CodexDC app")
   .option("--app", "Path to Codex.app / install dir (auto-detected if omitted)")
-  .option("--fuse", "Flip Electron's embedded asar integrity fuse", true)
   .option("--resign", "Code sign Codex.app on macOS", true)
   .option("--local", "Use a stable local signing identity on macOS")
   .option("--local-signing", "Alias for --local")
@@ -200,7 +198,7 @@ prog
 
 prog
   .command("doctor")
-  .describe("Diagnose common issues (signature, fuses, asar integrity, perms)")
+  .describe("Diagnose common issues (signature, asar integrity, perms)")
   .action(doctor);
 
 prog

@@ -3,7 +3,6 @@ import { ensureUserPaths } from "../paths.js";
 import { readState } from "../state.js";
 import { readHeaderHash } from "../asar.js";
 import { getIntegrity } from "../integrity.js";
-import { readFuses, FuseV1 } from "../fuses.js";
 import { existsSync, readFileSync } from "node:fs";
 import { readCodexVersion } from "./install.js";
 import { describeUpdateMode, readUpdateMode } from "../update-mode.js";
@@ -32,7 +31,6 @@ export async function status(): Promise<void> {
   console.log(`  codex ver:    ${state.codexVersion ?? "(unknown)"}`);
   if (state.codexChannel) console.log(`  channel:      ${state.codexChannel}`);
   if (state.codexBundleId) console.log(`  bundle id:    ${state.codexBundleId}`);
-  console.log(`  fuse flipped: ${state.fuseFlipped}`);
   console.log(`  resigned:     ${state.resigned}`);
   if (state.signingMode) console.log(`  sign mode:    ${state.signingMode}`);
   if (state.signingIdentity) console.log(`  sign identity: ${state.signingIdentity}`);
@@ -88,15 +86,7 @@ export async function status(): Promise<void> {
       );
     }
   }
-  if (existsSync(codex.electronBinary)) {
-    try {
-      const fuses = readFuses(codex.electronBinary);
-      const v = fuses.fuses[FuseV1.EnableEmbeddedAsarIntegrityValidation];
-      console.log(`  asar fuse:    ${v}`);
-    } catch (e) {
-      console.log(kleur.dim(`  fuses:        unreadable (${(e as Error).message})`));
-    }
-  }
+
 }
 
 function readSafeMode(configFile: string): boolean {

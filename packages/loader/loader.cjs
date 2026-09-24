@@ -9,7 +9,7 @@
  *      (also recorded in __codexpp.userRoot).
  *   2. Hook `require` so renderer preloads can find our runtime.
  *   3. Load the runtime's main-process entry BEFORE the original main entry.
- *      The runtime patches Electron's BrowserWindow to inject our preload script.
+ *      The runtime patches the host's BrowserWindow to inject our preload script.
  *   4. Load the original main entry. If anything in our pipeline throws, log
  *      it but always fall through to the original main so Codex still launches
  *      (broken tweak system > broken Codex).

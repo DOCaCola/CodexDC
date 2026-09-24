@@ -15,7 +15,8 @@ release. Distribution packages are unsigned; publisher signing/notarization
 credentials have not been configured.
 
 The official desktop application is not distributed here. Install it normally
-before using CodexDC. Keep it installed for official updates and recovery.
+before using CodexDC. On macOS, the current desktop is named `ChatGPT.app` and
+is identified by its Codex bundle ID. Keep it installed for official updates and recovery.
 
 ## Installation
 
@@ -120,6 +121,12 @@ Source checkouts use Git updates; automatic release updates are disabled.
 
 macOS native builds require Xcode command-line tools and Node headers. CI uses
 the pinned Node distribution from `scripts/package.mjs --node-only`.
+
+The desktop uses the native Owl host, not Electron. Owl still exposes the
+`electron` module API and retains names such as `ElectronAsarIntegrity` in its
+archive metadata. The runtime uses that host API; the Electron development
+dependency supplies API types only, and `@electron/asar` handles the archive
+format. No Electron framework or fuse patching is used.
 
 Source and generated artifacts are separated. Do not commit extracted Codex
 bundles, application binaries, local credentials or investigation notes.

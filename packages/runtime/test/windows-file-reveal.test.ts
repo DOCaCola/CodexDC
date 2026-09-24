@@ -92,7 +92,7 @@ test("Windows openPath uses Directory Opus for directories", async () => {
   assert.deepEqual(args, ["/acmd", "Go", "C:\\tmp", "TOFRONT"]);
 });
 
-test("Windows openPath preserves Electron behavior for files", async () => {
+test("Windows openPath preserves host behavior for files", async () => {
   const stockPaths: string[] = [];
   const shell = {
     showItemInFolder() {},
@@ -116,7 +116,7 @@ test("Windows openPath preserves Electron behavior for files", async () => {
   assert.deepEqual(stockPaths, ["C:\\tmp\\image.png"]);
 });
 
-test("file reveal leaves Electron unchanged when Directory Opus is unavailable", () => {
+test("file reveal leaves the host unchanged when Directory Opus is unavailable", () => {
   let stockCalls = 0;
   const stockShowItemInFolder = () => { stockCalls += 1; };
   const stockOpenPath = async () => "";

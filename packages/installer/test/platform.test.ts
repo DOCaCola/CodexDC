@@ -8,6 +8,7 @@ import { writePlist } from "../src/plist";
 import { matchesCodexMainExecutable } from "../src/commands/debug";
 import {
   hasUsableWindowsStoreMirror,
+  findMacCodexApps,
   inferCodexChannel,
   locateCodex,
   readWindowsAppExecutableName,
@@ -15,6 +16,30 @@ import {
   resolveLinuxInstall,
   resolveWindowsExecutable,
 } from "../src/platform";
+
+test("macOS discovery uses bundle identity and ASAR layout, not the app filename", () => {
+  const root = mkdtempSync(join(tmpdir(), "codexdc-discovery-"));
+  try {
+    const apps = [
+      ["ChatGPT.app", "com.openai.codex", true],
+      ["Renamed Preview.app", "com.openai.codex.beta", true],
+      ["CodexDC.app", "io.github.docacola.codexdc", true],
+      ["ChatGPT Native.app", "com.openai.chat", false],
+      ["Incomplete.app", "com.openai.codex", false],
+    ] as const;
+    for (const [name, bundleId, asar] of apps) {
+      const contents = join(root, name, "Contents");
+      mkdirSync(join(contents, "Resources"), { recursive: true });
+      writePlist(join(contents, "Info.plist"), { CFBundleIdentifier: bundleId });
+      if (asar) writeFileSync(join(contents, "Resources", "app.asar"), "");
+    }
+    assert.deepEqual(findMacCodexApps(root).sort(), [
+      join(root, "ChatGPT.app"), join(root, "Renamed Preview.app"),
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("inferCodexChannel detects stable and beta metadata", () => {
   assert.equal(inferCodexChannel("com.openai.codex", "Codex"), "stable");
@@ -95,7 +120,7 @@ test("locateCodex reads beta bundle metadata from override path on macOS", { ski
     const app = join(root, "Codex (Beta).app");
     mkdirSync(join(app, "Contents", "Resources"), { recursive: true });
     mkdirSync(
-      join(app, "Contents", "Frameworks", "Electron Framework.framework", "Versions", "A"),
+      join(app, "Contents", "Frameworks", "Codex Framework.framework", "Versions", "A"),
       { recursive: true },
     );
     writeFileSync(join(app, "Contents", "Resources", "app.asar"), "");

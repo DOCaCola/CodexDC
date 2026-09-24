@@ -71,7 +71,6 @@ export async function repair(opts: Opts = {}): Promise<void> {
     try {
       await install({
         app: targetAppRoot,
-        fuse: state?.fuseFlipped ?? true,
         resign: state?.resigned ?? true,
         localSigning: opts.localSigning === true,
         quiet: opts.quiet,

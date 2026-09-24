@@ -1,6 +1,6 @@
 /**
  * Plist read/write. We use the `plist` package (XML plist) for the
- * common case (Electron writes Info.plist as XML). If we ever encounter a
+ * common case (the desktop writes Info.plist as XML). If we ever encounter a
  * binary plist we shell out to `plutil -convert xml1` on macOS.
  */
 import { readFileSync, writeFileSync } from "node:fs";

@@ -4,7 +4,7 @@
  * creates gets our preload script attached. We also stand up an IPC
  * channel for tweaks to talk to the main process.
  *
- * We are in CJS land here (matches Electron's main process and Codex's own
+ * We are in CJS land here (matches the host's main process and Codex's own
  * code). The renderer-side runtime is bundled separately into preload.js.
  */
 import { app, BrowserView, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, session, shell, webContents } from "electron";
@@ -591,30 +591,11 @@ const tweakLifecycleDeps = {
 
 // 1. Hook every session so our preload runs in every renderer.
 //
-// We use Electron's modern `session.registerPreloadScript` API (added in
-// Electron 35). The deprecated `setPreloads` path silently no-ops in some
-// configurations (notably with sandboxed renderers), so registerPreloadScript
-// is the only reliable way to inject into Codex's BrowserWindows.
+// Owl exposes registerPreloadScript through its host API.
 function registerPreload(s: Electron.Session, label: string): void {
   try {
-    const reg = (s as unknown as {
-      registerPreloadScript?: (opts: {
-        type?: "frame" | "service-worker";
-        id?: string;
-        filePath: string;
-      }) => string;
-    }).registerPreloadScript;
-    if (typeof reg === "function") {
-      reg.call(s, { type: "frame", filePath: PRELOAD_PATH, id: "codexdc" });
-      log("info", `preload registered (registerPreloadScript) on ${label}:`, PRELOAD_PATH);
-      return;
-    }
-    // Fallback for older Electron versions.
-    const existing = s.getPreloads();
-    if (!existing.includes(PRELOAD_PATH)) {
-      s.setPreloads([...existing, PRELOAD_PATH]);
-    }
-    log("info", `preload registered (setPreloads) on ${label}:`, PRELOAD_PATH);
+    s.registerPreloadScript({ type: "frame", filePath: PRELOAD_PATH, id: "codexdc" });
+    log("info", `preload registered on ${label}:`, PRELOAD_PATH);
   } catch (e) {
     if (e instanceof Error && e.message.includes("existing ID")) {
       log("info", `preload already registered on ${label}:`, PRELOAD_PATH);
@@ -2486,5 +2467,5 @@ function assertBounds(bounds: Electron.Rectangle): void {
   }
 }
 
-// Touch BrowserWindow to keep its import — older Electron lint rules.
+// Keep BrowserWindow available to the host integration.
 void BrowserWindow;

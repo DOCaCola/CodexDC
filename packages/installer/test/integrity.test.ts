@@ -154,7 +154,7 @@ function fakeWindowsInstall(executable: string): CodexInstall {
     resourcesDir: join(appRoot, "resources"),
     asarPath: join(appRoot, "resources", "app.asar"),
     metaPath: null,
-    electronBinary: executable,
+
     executable,
     appName: "ChatGPT",
     appUserModelId: "DOCaCola.CodexDC",

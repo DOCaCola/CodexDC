@@ -58,7 +58,7 @@ export function getIntegrity(install: CodexInstall): IntegrityEntry | null {
     return block["Resources/app.asar"] ?? null;
   }
   if (install.platform === "win32") {
-    return getWindowsEmbeddedAsarIntegrity(install.electronBinary);
+    return getWindowsEmbeddedAsarIntegrity(install.executable);
   }
   return null;
 }
@@ -85,7 +85,7 @@ export function setIntegrity(
     };
   }
   if (install.platform === "win32") {
-    return setWindowsEmbeddedAsarIntegrity(install.electronBinary, hash);
+    return setWindowsEmbeddedAsarIntegrity(install.executable, hash);
   }
   return null;
 }

@@ -38,7 +38,6 @@ export async function uninstall(opts: Opts = {}): Promise<void> {
   const backupAsar = join(paths.backup, "app.asar");
   const backupAsarUnpacked = join(paths.backup, "app.asar.unpacked");
   const backupPlist = codex.metaPath ? join(paths.backup, "Info.plist") : null;
-  const backupFramework = join(paths.backup, "Electron Framework");
   const restorePlan = chooseRestorePlan({
     state,
     currentAsarHash: safeReadHeaderHash(codex.asarPath),
@@ -58,7 +57,6 @@ export async function uninstall(opts: Opts = {}): Promise<void> {
       backupAsar,
       backupAsarUnpacked,
       backupPlist,
-      backupFramework,
       state,
     });
     console.log(kleur.green("Restored Codex.app files from backup."));
@@ -175,7 +173,6 @@ function restorePartialBackup(
     backupAsar: string;
     backupAsarUnpacked: string;
     backupPlist: string | null;
-    backupFramework: string;
     state: InstallerState | null;
   },
 ): void {
@@ -202,16 +199,6 @@ function restorePartialBackup(
   }
   if (codex.metaPath && opts.backupPlist && existsSync(opts.backupPlist)) {
     cpSync(opts.backupPlist, codex.metaPath);
-  }
-  if (opts.state?.fuseFlipped && existsSync(opts.backupFramework)) {
-    if (!existsSync(codex.electronBinary)) {
-      throw new Error(
-        `Cannot safely restore Electron Framework backup because the current Codex layout has no Electron Framework at:\n` +
-          `  ${codex.electronBinary}\n\n` +
-          `Use a full Codex.app backup or reinstall Codex from the official app.`,
-      );
-    }
-    cpSync(opts.backupFramework, codex.electronBinary);
   }
   if (codex.platform === "win32") {
     const restoredHash = readHeaderHash(codex.asarPath).headerHash;
