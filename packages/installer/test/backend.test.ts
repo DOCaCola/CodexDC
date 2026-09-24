@@ -39,7 +39,7 @@ test("selection and rollback preserve complete package paths; failed selections 
 
 test("release selection requires the exact architecture and an unambiguous checksum", () => {
   assert.equal(backendAssetName("darwin", "arm64"), "codex-doca-aarch64-apple-darwin.tar.gz");
-  assert.throws(() => backendAssetName("darwin", "x64"), /No fork CLI package/);
+  assert.throws(() => backendAssetName("darwin", "x64"), /No DC fork CLI package/);
   const bytes = Buffer.from("complete package");
   const digest = createHash("sha256").update(bytes).digest("hex");
   assert.equal(expectedChecksum(`${digest}  package.zip\n`, "package.zip"), digest);

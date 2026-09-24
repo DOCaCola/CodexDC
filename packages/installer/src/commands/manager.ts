@@ -1,7 +1,4 @@
 import prompts from "prompts";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import { importLegacyData, legacyDataRoot } from "../legacy-data.js";
 import { selfUpdate } from "./self-update.js";
 import { execFileSync } from "node:child_process";
 import { install } from "./install.js";
@@ -36,10 +33,6 @@ export async function manager(): Promise<void> {
     try {
       switch (action) {
         case "install":
-          if (existsSync(legacyDataRoot()) && !existsSync(join(userPaths().root, "config.json")) && !existsSync(join(userPaths().root, "tweaks"))) {
-            const { migrate } = await prompts({ type: "confirm", name: "migrate", message: "Copy your existing Codex++ tweaks and settings into CodexDC?", initial: true });
-            if (migrate) importLegacyData(legacyDataRoot());
-          }
           if (process.platform === "darwin") await installManagedMac();
           else await install();
           console.log("Choose optional tweaks from the Tweak Store in CodexDC Settings.");
@@ -57,7 +50,7 @@ export async function manager(): Promise<void> {
           execFileSync(process.platform === "win32" ? "explorer.exe" : "open", [userPaths().logDir]); break;
         case "uninstall": {
           const { confirmed } = await prompts({ type: "confirm", name: "confirmed",
-            message: "Remove the CodexDC managed app and maintenance hooks? Your settings will remain.", initial: false });
+            message: "Remove the CodexDC managed app? Your settings will remain.", initial: false });
           if (confirmed) {
             if (process.platform === "darwin") uninstallManagedMac();
             else await uninstall();
@@ -69,10 +62,10 @@ export async function manager(): Promise<void> {
           const { choice } = await prompts({ type: "select", name: "choice", message: "Codex CLI",
             choices: [
               { title: "Desktop bundled", value: "bundled" },
-              { title: "Install latest fork and select it", value: "install" },
-              { title: "Use installed fork", value: "fork" },
+              { title: "Install latest DC fork and select it", value: "install" },
+              { title: "Use installed DC fork", value: "fork" },
               { title: "Check latest release", value: "check" },
-              { title: "Previous installed fork", value: "rollback" },
+              { title: "Previous installed DC fork", value: "rollback" },
               { title: "Back", value: "back" },
             ] });
           if (choice === "install") { await installBackend(); selectBackend("fork"); }

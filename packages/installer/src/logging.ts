@@ -1,8 +1,6 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { platform } from "node:os";
 import { join } from "node:path";
 import { userPaths } from "./paths.js";
-import { targetUserHome } from "./ownership.js";
 
 export const MAX_LOG_BYTES = 10 * 1024 * 1024;
 
@@ -22,8 +20,5 @@ export function capKnownLogFiles(): void {
   const paths = userPaths();
   for (const file of ["main.log", "preload.log", "loader.log"]) {
     capLogFile(join(paths.logDir, file));
-  }
-  if (platform() === "darwin") {
-    capLogFile(join(targetUserHome(), "Library", "Logs", "codexdc-watcher.log"));
   }
 }

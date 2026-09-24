@@ -45,7 +45,7 @@ test("Windows update bridge compares dotted Store versions numerically", () => {
 test("Windows update bridge derives package identity from a managed mirror", () => {
   assert.deepEqual(
     bridge.__test.packageDetailsFromAppRoot(
-      "C:\\Users\\Test\\AppData\\Local\\codexdc\\store-apps\\OpenAI.Codex_26.715.8383.0_x64__publisher\\app",
+      "C:\\Users\\Test\\AppData\\Local\\codex-dc\\store-apps\\OpenAI.Codex_26.715.8383.0_x64__publisher\\app",
     ),
     {
       packageName: "OpenAI.Codex",

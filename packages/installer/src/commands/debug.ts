@@ -143,7 +143,7 @@ export function codexDataPaths(codex: Pick<CodexInstall, "appName" | "bundleId" 
       ["Roaming data", join(roaming, appName)],
       ["Local data", join(local, appName)],
       ["Local cache", join(local, appName, "Cache")],
-      ["CodexDC Store mirror", join(local, "codexdc", "store-apps")],
+      ["CodexDC Store mirror", join(local, "codex-dc", "store-apps")],
     ]);
   }
 

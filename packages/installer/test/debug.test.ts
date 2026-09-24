@@ -74,7 +74,7 @@ test("parsePsOutput extracts pids, start times, and commands", () => {
 
 test("Windows desktop run check ignores CLI executables with the same basename", () => {
   const codex = {
-    executable: "C:\\Users\\user\\AppData\\Local\\codexdc\\store-apps\\package\\app\\Codex.exe",
+    executable: "C:\\Users\\user\\AppData\\Local\\codex-dc\\store-apps\\package\\app\\Codex.exe",
   };
 
   assert.equal(matchesCodexMainExecutable(codex, codex.executable), true);

@@ -8,13 +8,6 @@ export const WINDOWS_CODEX_CONTEXT_MENU_KEYS = [
   "HKCU:\\Software\\Classes\\Directory\\Background\\shell\\OpenProjectInCodex",
 ];
 
-export const WINDOWS_WATCHER_TASK_NAMES = [
-  "codexdc-watcher",
-  "codexdc-watcher-interval",
-  "codexdc-watcher-hourly",
-  "codexdc-watcher-daily",
-];
-
 export function cleanupWindowsManagedArtifacts(): void {
   if (platform() !== "win32") return;
 
@@ -43,39 +36,18 @@ export function buildWindowsManagedCleanupScript(input: {
 }): string {
   const cleanupPaths = [
     input.localAppData ? join(input.localAppData, "Microsoft", "WindowsApps", "codexdc-codex.cmd") : null,
-    input.localAppData ? join(input.localAppData, "codexdc", "store-apps") : null,
-    input.appData ? join(input.appData, "codexdc", "bin", "watcher.cmd") : null,
+    input.localAppData ? join(input.localAppData, "codex-dc", "store-apps") : null,
     input.appData ? join(input.appData, "Microsoft", "Windows", "Start Menu", "Programs", "CodexDC.lnk") : null,
     join(input.home, "Desktop", "CodexDC.lnk"),
   ].filter((path): path is string => path !== null);
 
   const emptyDirs = [
-    input.appData ? join(input.appData, "codexdc", "bin") : null,
+    input.appData ? join(input.appData, "codex-dc", "bin") : null,
   ].filter((path): path is string => path !== null);
 
   return [
     "$ErrorActionPreference = 'SilentlyContinue'",
-    "$watcherTasks = @(",
-    ...WINDOWS_WATCHER_TASK_NAMES.map((name) => `  '${escapePowerShellSingleQuotedString(name)}'`),
-    ")",
-    "foreach ($taskName in $watcherTasks) {",
-    "  Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue | ForEach-Object {",
-    "    try { Stop-ScheduledTask -InputObject $_ -ErrorAction SilentlyContinue } catch {}",
-    "    try { Disable-ScheduledTask -InputObject $_ -ErrorAction SilentlyContinue } catch {}",
-    "    try { Unregister-ScheduledTask -InputObject $_ -Confirm:$false -ErrorAction SilentlyContinue } catch {}",
-    "  }",
-    "}",
-    "$currentPid = $PID",
-    "Get-CimInstance Win32_Process | Where-Object {",
-    "  $_.ProcessId -ne $currentPid -and $_.CommandLine -and",
-    "  $_.CommandLine.ToString().ToLowerInvariant().Contains('codexdc') -and",
-    "  ($_.CommandLine.ToString().ToLowerInvariant().Contains('watcher.cmd') -or",
-    "    $_.CommandLine.ToString().ToLowerInvariant().Contains('--watcher') -or",
-    "    $_.CommandLine.ToString().ToLowerInvariant().Contains('codexdc-watcher'))",
-    "} | ForEach-Object {",
-    "  try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {}",
-    "}",
-    "$managedPattern = '\\codexdc\\store-apps\\'",
+    "$managedPattern = '\\codex-dc\\store-apps\\'",
     "$contextKeys = @(",
     ...WINDOWS_CODEX_CONTEXT_MENU_KEYS.map((key) => `  '${escapePowerShellSingleQuotedString(key)}'`),
     ")",

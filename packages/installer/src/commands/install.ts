@@ -12,7 +12,6 @@ import { readFuses, writeFuse } from "../fuses.js";
 import { clearQuarantine, prepareCodeSigning, signCodexApp, signatureInfo } from "../codesign.js";
 import { readPlist } from "../plist.js";
 import { writeState } from "../state.js";
-import { installWatcher, type WatcherKind } from "../watcher.js";
 import { CODEXDC_VERSION } from "../version.js";
 import { formatCliShimResult, installCliShims } from "../cli-shim.js";
 import { findSourceRoot } from "../source-root.js";
@@ -38,8 +37,6 @@ interface Opts {
   fuse?: boolean; // sade --no-fuse → fuse: false
   resign?: boolean;
   localSigning?: boolean;
-  watcher?: boolean;
-  watcherKind?: WatcherKind;
   quiet?: boolean;
   verbose?: boolean;
 }
@@ -52,7 +49,6 @@ export async function install(opts: Opts = {}): Promise<void> {
   const wantsFuseFlip = opts.fuse !== false;
   const resign = opts.resign !== false;
   let localSigning = opts.localSigning === true;
-  const wantWatcher = opts.watcher !== false;
 
   const step = makeStepper({ quiet: opts.quiet === true, verbose: opts.verbose === true });
   const codex = locateCodex(opts.app);
@@ -184,16 +180,6 @@ export async function install(opts: Opts = {}): Promise<void> {
     }
   }
 
-  // 7. Auto-repair watcher.
-  let watcher: WatcherKind = opts.watcherKind ?? "none";
-  if (wantWatcher) {
-    try {
-      watcher = installWatcher(codex.appRoot);
-      step(`Watcher: ${watcher}`);
-    } catch (e) {
-      console.warn(kleur.yellow(`Watcher install failed: ${(e as Error).message}`));
-    }
-  }
 
   // 8. Persist state.
   writeState(paths.stateFile, {
@@ -213,7 +199,6 @@ export async function install(opts: Opts = {}): Promise<void> {
     signingIdentity,
     signingIdentityHash,
     originalEntryPoint: originalEntry,
-    watcher,
     sourceRoot,
     nodePath: process.execPath,
     managedCopy: true,
@@ -855,7 +840,7 @@ function escapePowerShellSingleQuotedString(value: string): string {
 
 function installWindowsManagedAppLauncher(codex: CodexInstall): { shortcutPaths: string[] } | null {
   if (codex.platform !== "win32") return null;
-  if (!/\\codexdc\\store-apps\\/i.test(`${codex.appRoot.replace(/\//g, "\\")}\\`)) {
+  if (!/\\codex-dc\\store-apps\\/i.test(`${codex.appRoot.replace(/\//g, "\\")}\\`)) {
     return null;
   }
 

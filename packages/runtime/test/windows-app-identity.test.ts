@@ -8,7 +8,7 @@ import {
 test("infers the CodexDC AppUserModelId from a CodexDC mirror path", () => {
   assert.equal(
     inferWindowsAppUserModelId(
-      "C:\\Users\\user\\AppData\\Local\\codexdc\\store-apps\\OpenAI.Codex_26.707.3748.0_x64__2p2nqsd0c76g0\\app\\resources",
+      "C:\\Users\\user\\AppData\\Local\\codex-dc\\store-apps\\OpenAI.Codex_26.707.3748.0_x64__2p2nqsd0c76g0\\app\\resources",
     ),
     CODEX_PLUS_PLUS_WINDOWS_APP_USER_MODEL_ID,
   );

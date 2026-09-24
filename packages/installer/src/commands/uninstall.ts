@@ -6,7 +6,6 @@ import { locateCodex } from "../platform.js";
 import { ensureUserPaths } from "../paths.js";
 import { readState, type InstallerState } from "../state.js";
 import { prepareCodeSigning, signCodexApp } from "../codesign.js";
-import { uninstallWatcher } from "../watcher.js";
 import { chownForTargetUser } from "../ownership.js";
 import { cleanupWindowsManagedArtifacts } from "../windows-cleanup.js";
 import { readHeaderHash } from "../asar.js";
@@ -65,9 +64,7 @@ export async function uninstall(opts: Opts = {}): Promise<void> {
     console.log(kleur.green("Restored Codex.app files from backup."));
   }
 
-  uninstallWatcher();
   cleanupWindowsManagedArtifacts();
-  console.log(kleur.green("Removed watcher."));
 
   cleanupRuntimeAndState(paths);
   console.log(kleur.green("Cleaned up runtime + state."));

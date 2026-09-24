@@ -27,7 +27,6 @@ import {
   releaseVersionFromTag,
   resolveSelfUpdateRepo,
   shouldDownloadSelfUpdate,
-  shouldRunWatcherSelfUpdate,
 } from "../src/commands/self-update";
 import { validateTweak } from "../src/commands/validate-tweak";
 import {
@@ -36,7 +35,6 @@ import {
 } from "../src/codex-window-services";
 import { readSelfUpdateState, writeSelfUpdateState } from "../src/self-update-state";
 import { describeInstallationSource } from "../src/source-root";
-import { watcherShellScript } from "../src/watcher";
 
 test("createTweak scaffolds a both-scope tweak", () => {
   withTempDir((root) => {
@@ -425,44 +423,6 @@ test("self-update state persists human-readable diagnostics", () => {
     assert.equal(state?.latestVersion, "0.1.4");
     assert.equal(state?.error, "download failed");
   });
-});
-
-test("watcher self-update checks stay hourly while repair can run more often", () => {
-  withTempDir((root) => {
-    const file = join(root, "self-update-state.json");
-    const checkedAt = Date.parse("2026-05-01T00:00:00.000Z");
-    writeSelfUpdateState(file, {
-      checkedAt: new Date(checkedAt).toISOString(),
-      completedAt: new Date(checkedAt + 1_000).toISOString(),
-      status: "up-to-date",
-      currentVersion: "0.1.4",
-      latestVersion: "0.1.4",
-      targetRef: "v0.1.4",
-      releaseUrl: "https://github.com/DOCaCola/CodexDC/releases/tag/v0.1.4",
-      repo: "DOCaCola/CodexDC",
-      channel: "stable",
-      sourceRoot: root,
-    });
-
-    assert.equal(shouldRunWatcherSelfUpdate(file, checkedAt + 5 * 60_000), false);
-    assert.equal(shouldRunWatcherSelfUpdate(file, checkedAt + 60 * 60_000), true);
-  });
-});
-
-test("watcher runs self-update and app repair as separate steps", () => {
-  const script = watcherShellScript();
-
-  assert.match(script, /update --watcher --quiet --no-repair/);
-  assert.match(script, /repair --watcher --quiet/);
-  assert.match(script, /update[\s\S]+\|\| true;[\s\S]+repair/);
-});
-
-test("launchd watcher script clears stale log entries before each run", () => {
-  const script = watcherShellScript("/tmp/codex plusplus/watch'er.log");
-
-  assert.match(script, /^: > '\/tmp\/codex plusplus\/watch'\\''er\.log'; sleep 3; /);
-  assert.match(script, /update --watcher --quiet --no-repair/);
-  assert.match(script, /repair --watcher --quiet/);
 });
 
 test("self-update marks the installed CLI executable on unix", () => {

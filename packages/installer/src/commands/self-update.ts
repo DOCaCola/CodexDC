@@ -1,9 +1,7 @@
 import { chmodSync } from "node:fs";
 import { join } from "node:path";
 import { compareSemver } from "../version.js";
-import { readSelfUpdateState } from "../self-update-state.js";
 export { updatePackage as selfUpdate } from "../package-update.js";
-const WATCHER_SELF_UPDATE_INTERVAL_MS = 60 * 60 * 1000;
 const COMMAND_OUTPUT_TAIL_CHARS = 8000;
 export interface CommandResult { status: number; signal: NodeJS.Signals | null; stdout: string; stderr: string; error?: Error }
 export function shouldDownloadSelfUpdate(
@@ -15,13 +13,6 @@ export function shouldDownloadSelfUpdate(
   const targetVersion = releaseVersionFromTag(targetRef);
   if (!targetVersion) return true;
   return compareSemver(targetVersion, currentVersion) > 0;
-}
-
-export function shouldRunWatcherSelfUpdate(stateFile: string, now = Date.now()): boolean {
-  const state = readSelfUpdateState(stateFile);
-  if (!state) return true;
-  const checkedAt = Date.parse(state.checkedAt);
-  return !Number.isFinite(checkedAt) || now - checkedAt >= WATCHER_SELF_UPDATE_INTERVAL_MS;
 }
 
 export function ensureCliExecutable(sourceRoot: string): void {

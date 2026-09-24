@@ -6,7 +6,7 @@ export function inferWindowsAppUserModelId(resourcesPath: string | null | undefi
   const normalized = resourcesPath.replace(/\//g, "\\").replace(/\\+$/, "");
   const match = /(?:^|\\)([^\\]+)\\app\\resources$/i.exec(normalized);
   if (!match) return null;
-  if (/\\codexdc\\store-apps\\/i.test(normalized)) {
+  if (/\\codex-dc\\store-apps\\/i.test(normalized)) {
     return CODEX_PLUS_PLUS_WINDOWS_APP_USER_MODEL_ID;
   }
 

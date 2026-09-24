@@ -1,7 +1,7 @@
 {
   "name": "codexdc-workspace",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "license": "MIT",
   "description": "Tweak system for the OpenAI Codex desktop app",
   "type": "module",
@@ -17,7 +17,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspace @codexdc/sdk && npm run build --workspace @codexdc/native-host && npm run build --workspace @codexdc/runtime && npm run build --workspace @codexdc/loader && npm run build --workspace codexdc",
+    "build": "npm run clean && npm run build --workspace @codexdc/sdk && npm run build --workspace @codexdc/native-host && npm run build --workspace @codexdc/runtime && npm run build --workspace @codexdc/loader && npm run build --workspace codexdc",
     "clean": "node scripts/clean.mjs",
     "test": "npm run build && node --import tsx --test packages/*/test/*.test.ts",
     "audit": "npm audit --workspaces --include-workspace-root",

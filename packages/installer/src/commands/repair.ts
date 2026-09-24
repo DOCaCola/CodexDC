@@ -9,7 +9,6 @@ import { readState, writeState } from "../state.js";
 import { locateCodex } from "../platform.js";
 import { readHeaderHash } from "../asar.js";
 import { CODEXDC_VERSION, compareSemver } from "../version.js";
-import { installWatcher } from "../watcher.js";
 import { clearUpdateMode, isUpdateModeFresh, readUpdateMode, writeUpdateMode } from "../update-mode.js";
 import { findSourceRoot } from "../source-root.js";
 import { resolveManagedCodexInstall } from "../codex-target.js";
@@ -31,21 +30,17 @@ interface Opts {
   quiet?: boolean;
   force?: boolean;
   localSigning?: boolean;
-  watcher?: boolean;
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
 const sourceRoot = findSourceRoot(here);
 const SETTLE_TIMEOUT_MS = 120_000;
-const WATCHER_SETTLE_TIMEOUT_MS = 15 * 60_000;
 const SETTLE_SAMPLE_MS = 2_000;
 const SETTLE_STABLE_SAMPLES = 2;
-const WATCHER_RETRY_NOTICE_MS = 30_000;
 
 /**
  * `repair` is essentially `install` rerun, but it preserves the user's
- * config + tweaks (which `install` already does) and refreshes the watcher
- * unless the prior install explicitly had no watcher. We re-derive everything from the
+ * config + tweaks. We re-derive everything from the
  * current Codex.app on disk; the new asar/plist/framework hashes will
  * differ from those in `state.json` after a Sparkle update, so we just
  * overwrite state.
@@ -79,8 +74,6 @@ export async function repair(opts: Opts = {}): Promise<void> {
         fuse: state?.fuseFlipped ?? true,
         resign: state?.resigned ?? true,
         localSigning: opts.localSigning === true,
-        watcher: state?.watcher === "none" ? false : true,
-        watcherKind: state?.watcher,
         quiet: opts.quiet,
       });
     } catch (error) {
@@ -119,8 +112,7 @@ export async function repair(opts: Opts = {}): Promise<void> {
     if (updateMode) {
       const codexVersion = readCodexVersion(codex.metaPath);
       if (codexVersion === updateMode.codexVersion && isUpdateModeFresh(updateMode)) {
-        const watcher = refreshWatcher(state.watcher, codex.appRoot, opts.quiet);
-        writeState(paths.stateFile, { ...state, watcher, sourceRoot });
+        writeState(paths.stateFile, { ...state, sourceRoot });
         if (!updateMode.notifiedAt) {
           showUpdateModePausedAlert(codex.appRoot, codexVersion);
           writeUpdateMode(paths.updateModeFile, {
@@ -153,7 +145,6 @@ export async function repair(opts: Opts = {}): Promise<void> {
       if (managedAppRootChanged && !opts.quiet) {
         console.log(kleur.yellow(`Managed Codex path changed to ${codex.appRoot}; refreshing launcher and state.`));
       }
-      const watcher = refreshWatcher(state.watcher, codex.appRoot, opts.quiet);
       const needsRuntimeRefresh = compareSemver(CODEXDC_VERSION, state.version) > 0;
       if (needsRuntimeRefresh) {
         if (!isAutoUpdateEnabled(paths.configFile)) {
@@ -169,7 +160,6 @@ export async function repair(opts: Opts = {}): Promise<void> {
         writeState(paths.stateFile, {
           ...state,
           appRoot: codex.appRoot,
-          watcher,
           codexVersion: readCodexVersion(codex.metaPath),
           codexChannel: codex.channel,
           codexBundleId: codex.bundleId,
@@ -195,7 +185,6 @@ export async function repair(opts: Opts = {}): Promise<void> {
       writeState(paths.stateFile, {
         ...state,
         appRoot: codex.appRoot,
-        watcher,
         codexVersion: readCodexVersion(codex.metaPath),
         codexChannel: codex.channel,
         codexBundleId: codex.bundleId,
@@ -276,18 +265,8 @@ interface SettleOptions {
   retryNoticeMs?: number;
 }
 
-function settleOptions(opts: Opts, updateModeFile: string): SettleOptions {
-  const updateMode = readUpdateMode(updateModeFile);
-  const watcherRetry = isWatcherRepair(opts) && updateMode !== null && isUpdateModeFresh(updateMode);
-  return {
-    quiet: opts.quiet,
-    timeoutMs: watcherRetry ? WATCHER_SETTLE_TIMEOUT_MS : SETTLE_TIMEOUT_MS,
-    retryNoticeMs: watcherRetry ? WATCHER_RETRY_NOTICE_MS : undefined,
-  };
-}
-
-function isWatcherRepair(opts: Opts): boolean {
-  return opts.watcher === true || process.env.CODEXDC_WATCHER === "1";
+function settleOptions(opts: Opts, _updateModeFile: string): SettleOptions {
+  return { quiet: opts.quiet, timeoutMs: SETTLE_TIMEOUT_MS };
 }
 
 async function waitForMacAppUpdateToSettle(appRoot: string | undefined, opts: SettleOptions = {}): Promise<void> {
@@ -357,19 +336,5 @@ function patchInputsReadable(appRoot: string): boolean {
     return true;
   } catch {
     return false;
-  }
-}
-
-function refreshWatcher(
-  previous: NonNullable<ReturnType<typeof readState>>["watcher"],
-  appRoot: string,
-  quiet?: boolean,
-): NonNullable<ReturnType<typeof readState>>["watcher"] {
-  if (previous === "none") return previous;
-  try {
-    return installWatcher(appRoot);
-  } catch (e) {
-    if (!quiet) console.warn(kleur.yellow(`Watcher refresh failed: ${(e as Error).message}`));
-    return previous;
   }
 }

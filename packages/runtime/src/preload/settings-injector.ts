@@ -103,21 +103,6 @@ interface InstallationSource {
   detail: string;
 }
 
-interface WatcherHealth {
-  checkedAt: string;
-  status: "ok" | "warn" | "error";
-  title: string;
-  summary: string;
-  watcher: string;
-  checks: WatcherHealthCheck[];
-}
-
-interface WatcherHealthCheck {
-  name: string;
-  status: "ok" | "warn" | "error";
-  detail: string;
-}
-
 interface TweakStoreRegistryView {
   schemaVersion: 1;
   generatedAt?: string;
@@ -1070,15 +1055,6 @@ function renderConfigPage(
       card.appendChild(rowSimple("Could not load update settings", String(e)));
     });
 
-  const watcher = document.createElement("section");
-  watcher.className = "flex flex-col gap-2";
-  watcher.appendChild(sectionTitle("Auto-Repair Watcher"));
-  const watcherCard = roundedCard();
-  watcherCard.appendChild(rowSimple("Checking watcher", "Verifying the updater repair service."));
-  watcher.appendChild(watcherCard);
-  sectionsWrap.appendChild(watcher);
-  renderWatcherHealthCard(watcherCard);
-
   const maintenance = document.createElement("section");
   maintenance.className = "flex flex-col gap-2";
   maintenance.appendChild(sectionTitle("Maintenance"));
@@ -1106,10 +1082,10 @@ function autoUpdateRow(config: CodexPlusPlusConfig): HTMLElement {
   left.className = "flex min-w-0 flex-col gap-1";
   const title = document.createElement("div");
   title.className = "min-w-0 text-sm text-token-text-primary";
-  title.textContent = "Automatically refresh CodexDC";
+  title.textContent = "Update CodexDC on launch";
   const desc = document.createElement("div");
   desc.className = "text-token-text-secondary min-w-0 text-sm";
-  desc.textContent = `Installed version v${config.version}. The watcher checks hourly while CodexDC is closed. Active sessions are never restarted.`;
+  desc.textContent = `Installed version v${config.version}. Checks for stable patcher updates when CodexDC launches. No scheduled background tasks.`;
   left.appendChild(title);
   left.appendChild(desc);
   row.appendChild(left);
@@ -1400,68 +1376,6 @@ function appendText(parent: HTMLElement, text: string): void {
   if (text) parent.appendChild(document.createTextNode(text));
 }
 
-function renderWatcherHealthCard(card: HTMLElement): void {
-  void ipcRenderer
-    .invoke("codexpp:get-watcher-health")
-    .then((health) => {
-      card.textContent = "";
-      renderWatcherHealth(card, health as WatcherHealth);
-    })
-    .catch((e) => {
-      card.textContent = "";
-      card.appendChild(rowSimple("Could not check watcher", String(e)));
-    });
-}
-
-function renderWatcherHealth(card: HTMLElement, health: WatcherHealth): void {
-  card.appendChild(watcherSummaryRow(health));
-  for (const check of health.checks) {
-    if (check.status === "ok") continue;
-    card.appendChild(watcherCheckRow(check));
-  }
-}
-
-function watcherSummaryRow(health: WatcherHealth): HTMLElement {
-  const row = document.createElement("div");
-  row.className = "flex items-center justify-between gap-4 p-3";
-  const left = document.createElement("div");
-  left.className = "flex min-w-0 items-start gap-3";
-  left.appendChild(statusBadge(health.status, health.watcher));
-  const stack = document.createElement("div");
-  stack.className = "flex min-w-0 flex-col gap-1";
-  const title = document.createElement("div");
-  title.className = "min-w-0 text-sm text-token-text-primary";
-  title.textContent = health.title;
-  const desc = document.createElement("div");
-  desc.className = "text-token-text-secondary min-w-0 text-sm";
-  desc.textContent = `${health.summary} Checked ${new Date(health.checkedAt).toLocaleString()}.`;
-  stack.appendChild(title);
-  stack.appendChild(desc);
-  left.appendChild(stack);
-  row.appendChild(left);
-
-  const action = document.createElement("div");
-  action.className = "flex shrink-0 items-center gap-2";
-  action.appendChild(
-    compactButton("Check Now", () => {
-      const card = row.parentElement;
-      if (!card) return;
-      card.textContent = "";
-      card.appendChild(rowSimple("Checking watcher", "Verifying the updater repair service."));
-      renderWatcherHealthCard(card);
-    }),
-  );
-  row.appendChild(action);
-  return row;
-}
-
-function watcherCheckRow(check: WatcherHealthCheck): HTMLElement {
-  const row = rowSimple(check.name, check.detail);
-  const left = row.firstElementChild as HTMLElement | null;
-  if (left) left.prepend(statusBadge(check.status));
-  return row;
-}
-
 function statusBadge(status: "ok" | "warn" | "error", label?: string): HTMLElement {
   const badge = document.createElement("span");
   const tone =
@@ -1537,19 +1451,7 @@ function refreshConfigCard(row: HTMLElement): void {
 }
 
 function uninstallRow(): HTMLElement {
-  const row = actionRow(
-    "Uninstall CodexDC",
-    "Copies the uninstall command. Run it from a terminal after quitting Codex.",
-  );
-  const action = row.querySelector<HTMLElement>("[data-codexpp-row-actions]");
-  action?.appendChild(
-    compactButton("Copy Command", () => {
-      void ipcRenderer
-        .invoke("codexpp:copy-text", "node ~/.codexdc/source/packages/installer/dist/cli.js uninstall")
-        .catch((e) => plog("copy uninstall command failed", String(e)));
-    }),
-  );
-  return row;
+  return rowSimple("Uninstall CodexDC", "Quit CodexDC, open its Setup launcher, and choose Uninstall CodexDC.");
 }
 
 function reportBugRow(): HTMLElement {

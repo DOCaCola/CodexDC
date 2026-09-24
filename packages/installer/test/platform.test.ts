@@ -50,7 +50,7 @@ test("Windows app metadata selects ChatGPT.exe and preserves Codex.exe fallback"
 test("uses the CodexDC AppUserModelId for a writable Store mirror", () => {
   assert.equal(
     readWindowsAppUserModelId(
-      "C:\\Users\\user\\AppData\\Local\\codexdc\\store-apps\\OpenAI.Codex_26.707.3748.0_x64__2p2nqsd0c76g0\\app",
+      "C:\\Users\\user\\AppData\\Local\\codex-dc\\store-apps\\OpenAI.Codex_26.707.3748.0_x64__2p2nqsd0c76g0\\app",
     ),
     "DOCaCola.CodexDC",
   );

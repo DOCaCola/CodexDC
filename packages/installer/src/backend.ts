@@ -4,6 +4,7 @@ import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { userPaths } from "./paths.js";
+import { CODEXDC_VERSION } from "./version.js";
 import { downloadReleaseAsset, expectedChecksum, extractPackage, latestRelease, releaseAsset, verifyChecksum, type Release } from "./releases.js";
 
 export const CLI_REPO = "DOCaCola/codex";
@@ -30,7 +31,7 @@ export function backendEnvironment(state: BackendState, inherited: NodeJS.Proces
   delete env.CODEX_CLI_PATH;
   if (state.provider === "fork") {
     if (!state.installed || !existsSync(state.installed.executable)) {
-      throw new Error("The selected fork CLI is missing. Reinstall it or explicitly select the desktop-bundled CLI.");
+      throw new Error("The selected DC fork CLI is missing. Reinstall it or explicitly select the desktop-bundled CLI.");
     }
     env.CODEX_CLI_PATH = state.installed.executable;
   }
@@ -47,7 +48,7 @@ export function selectBackend(provider: string, root = userPaths().root): Backen
 
 export function rollbackBackend(root = userPaths().root): BackendState {
   const state = backendState(root);
-  if (!state.previous || !existsSync(state.previous.executable)) throw new Error("No previous fork package is available");
+  if (!state.previous || !existsSync(state.previous.executable)) throw new Error("No previous DC fork package is available");
   save({ ...state, installed: state.previous, previous: state.installed }, root);
   return backendState(root);
 }
@@ -55,7 +56,7 @@ export function rollbackBackend(root = userPaths().root): BackendState {
 export function backendAssetName(platform: string, arch: string): string {
   if (platform === "win32" && arch === "x64") return "codex-doca-x86_64-pc-windows-msvc.zip";
   if (platform === "darwin" && arch === "arm64") return "codex-doca-aarch64-apple-darwin.tar.gz";
-  throw new Error(`No fork CLI package is configured for ${platform}/${arch}`);
+  throw new Error(`No DC fork CLI package is configured for ${platform}/${arch}`);
 }
 
 export async function checkBackend(): Promise<{ tag: string; url: string; asset: string }> {
@@ -117,7 +118,7 @@ export async function probeBackend(executable: string): Promise<string> {
       });
       child.stdin.on("error", () => {});
       child.stdin.write(JSON.stringify({ id: 1, method: "initialize", params: {
-        clientInfo: { name: "codexdc", title: "CodexDC compatibility check", version: "1.0.0" },
+        clientInfo: { name: "codexdc", title: "CodexDC compatibility check", version: CODEXDC_VERSION },
         capabilities: { experimentalApi: true },
       } }) + "\n");
     });

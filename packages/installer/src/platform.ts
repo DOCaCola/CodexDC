@@ -286,7 +286,7 @@ function ensureWindowsStoreMirror(storeAppRoot: string): string {
   const packageRoot = dirname(sourceAppRoot);
   const packageName = basename(packageRoot);
   const local = process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local");
-  const mirrorAppRoot = join(local, "codexdc", "store-apps", packageName, "app");
+  const mirrorAppRoot = join(local, "codex-dc", "store-apps", packageName, "app");
   if (!hasUsableWindowsStoreMirror(mirrorAppRoot)) {
     mirrorDirectory(sourceAppRoot, mirrorAppRoot);
   }
@@ -382,7 +382,7 @@ function publisherIdFromPackageRoot(packageRoot: string): string | null {
 }
 
 function inferWindowsAppUserModelIdFromPath(appRoot: string): string | null {
-  if (/\\codexdc\\store-apps\\/i.test(appRoot.replace(/\//g, "\\"))) {
+  if (/\\codex-dc\\store-apps\\/i.test(appRoot.replace(/\//g, "\\"))) {
     return CODEX_PLUS_PLUS_WINDOWS_APP_USER_MODEL_ID;
   }
 

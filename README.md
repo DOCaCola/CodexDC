@@ -44,10 +44,10 @@ versions and updates. Core app maintenance continues with optional tweaks disabl
 Use **Settings → Codex CLI**, or Setup → Choose Codex CLI backend:
 
 - **Desktop bundled** is the default.
-- **Our fork** downloads the complete latest stable `DOCaCola/codex` release,
+- **DC fork** downloads the complete latest stable `DOCaCola/codex` release,
   checks its SHA-256, and probes app-server initialization before making it available.
 
-Use **Install / update fork**, then **Use fork**. Quit and reopen CodexDC after
+Use **Install / update DC fork**, then **Use DC fork**. Quit and reopen CodexDC after
 finishing active tasks. Settings shows the running path separately from the saved
 selection. You can explicitly switch back or select the previous fork version.
 The bundled executable and system PATH are not replaced.
@@ -59,27 +59,35 @@ The startup probe does not certify every desktop feature against every CLI versi
 
 ## Desktop updates and recovery
 
-Windows maintains its own Store mirror and routes native update requests through
-the repair worker. On macOS, update official Codex through its menu, close both
-apps, and use **Repair / refresh desktop copy**. The watcher also detects changed
-source files. A watcher does not download an official update while Codex is closed.
+The **CodexDC patcher** checks for newer stable releases when CodexDC launches,
+before starting the desktop. Checks are limited to once an hour. It validates
+the download, refreshes the managed copy and retains the previous package.
+An already-running desktop is left alone. A download failure is recorded in
+`log/launch-update.log` and the installed version can still launch; a failed
+recovery stops launch and reports the problem.
+
+Turn **Update CodexDC on launch** off in Settings to disable automatic patcher
+updates. Manual updates remain available through **Setup → Update CodexDC**.
+Drafts and prereleases are excluded. Development checkouts use Git.
+There are no scheduled tasks, LaunchAgents or background maintenance services.
+
+Windows refreshes its managed copy from the installed Microsoft Store app.
+On macOS, update official Codex through its menu, close both apps and launch
+CodexDC. Launch checks also refresh the copy when the official app has changed.
 
 Use Setup for safe mode, repair, logs and uninstall. User settings are retained
 unless explicitly removed. A previous binary does not undo data migrations.
 
-## Existing Codex++ installations
+## Data directories
 
-Setup offers to copy existing tweaks, their saved data and enable flags into an
-empty CodexDC data directory. The old app remains usable. Imported local tweaks
-are protected from Store replacement: move a tweak folder out of the new
-`tweaks` directory before installing its catalog version. Its `tweak-data` folder
-and stable tweak ID preserve saved settings.
+CodexDC uses `%APPDATA%\codex-dc` on Windows and
+`~/Library/Application Support/codex-dc` on macOS. Windows managed desktop copies
+use `%LOCALAPPDATA%\codex-dc`. This is a fresh installation: there is no import,
+migration or fallback to the former `codexdc` or Codex++ directories.
 
-CodexDC data lives in `%APPDATA%\codexdc` on Windows and
-`~/Library/Application Support/codexdc` on macOS. Directory Opus file reveal is
-optional: set `codexPlusPlus.directoryOpus` to `true` in `config.json` and restart.
-Internal `codexPlusPlus` and `codexpp` identifiers remain for existing tweak APIs
-and configuration compatibility.
+Directory Opus file reveal is optional: set `codexPlusPlus.directoryOpus` to
+`true` in `config.json` and restart. Internal `codexPlusPlus` and `codexpp`
+identifiers are retained by the tweak API.
 
 ## Development
 

@@ -11,7 +11,7 @@ import {
 test("Store mirror retention keeps the active and immediately previous versions", () => {
   const root = mkdtempSync(join(tmpdir(), "codexpp-store-retention-"));
   try {
-    const storeRoot = join(root, "codexdc", "store-apps");
+    const storeRoot = join(root, "codex-dc", "store-apps");
     const oldest = createMirror(storeRoot, "OpenAI.Codex_26.707.3748.0_x64__publisher");
     const previous = createMirror(storeRoot, "OpenAI.Codex_26.715.8383.0_x64__publisher");
     const active = createMirror(storeRoot, "OpenAI.Codex_26.715.9079.0_x64__publisher");
@@ -37,7 +37,7 @@ test("Store mirror retention keeps the active and immediately previous versions"
 test("Store mirror retention always preserves an explicitly active older mirror", () => {
   const root = mkdtempSync(join(tmpdir(), "codexpp-store-retention-"));
   try {
-    const storeRoot = join(root, "codexdc", "store-apps");
+    const storeRoot = join(root, "codex-dc", "store-apps");
     const active = createMirror(storeRoot, "OpenAI.Codex_26.707.3748.0_x64__publisher");
     const newest = createMirror(storeRoot, "OpenAI.Codex_26.715.9079.0_x64__publisher");
     const middle = createMirror(storeRoot, "OpenAI.Codex_26.715.8383.0_x64__publisher");
@@ -73,7 +73,7 @@ test("Store mirror retention ignores paths outside the managed Store root", () =
 test("failed Store mirror cleanup removes only the managed package root", () => {
   const root = mkdtempSync(join(tmpdir(), "codexpp-store-retention-"));
   try {
-    const storeRoot = join(root, "codexdc", "store-apps");
+    const storeRoot = join(root, "codex-dc", "store-apps");
     const appRoot = createMirror(
       storeRoot,
       "OpenAI.Codex_26.818.3698.0_x64__publisher",

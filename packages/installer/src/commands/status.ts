@@ -36,7 +36,6 @@ export async function status(): Promise<void> {
   console.log(`  resigned:     ${state.resigned}`);
   if (state.signingMode) console.log(`  sign mode:    ${state.signingMode}`);
   if (state.signingIdentity) console.log(`  sign identity: ${state.signingIdentity}`);
-  console.log(`  watcher:      ${state.watcher}`);
   console.log();
 
   let codex;

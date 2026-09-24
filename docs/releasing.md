@@ -28,11 +28,11 @@ On each supported platform, using a separate test user:
 4. Verify login, existing sessions, shell execution, file access, screenshots,
    computer use and native permissions. Quit and reopen from Start/Dock.
 5. Install and disable a catalog tweak, enter safe mode, then repair.
-6. Install the fork CLI. Verify initialize, normal task creation, resume, tools,
+6. Install the DC fork CLI. Verify initialize, normal task creation, resume, tools,
    code mode and sandbox helpers. Switch back to Desktop bundled.
 7. Update official Codex, refresh the managed copy, then verify state and signing.
 8. Update CodexDC from an older package. Test the older Setup entry point and
-   pinned launcher after activation. Test interrupted/failed update recovery.
+   pinned launcher after activation. Verify startup updates with the setting on and off. Test interrupted/failed update recovery.
 9. Uninstall CodexDC. Verify official Codex and retained user settings still work.
 
 macOS login, Launch Services, stable local signing, TCC permissions, helper

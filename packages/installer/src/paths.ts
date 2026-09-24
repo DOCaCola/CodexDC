@@ -60,13 +60,13 @@ function userRoot(): string {
   const home = targetUserHome();
   switch (platform()) {
     case "darwin":
-      return join(home, "Library", "Application Support", "codexdc");
+      return join(home, "Library", "Application Support", "codex-dc");
     case "win32":
-      return join(process.env.APPDATA ?? join(home, "AppData", "Roaming"), "codexdc");
+      return join(process.env.APPDATA ?? join(home, "AppData", "Roaming"), "codex-dc");
     default:
       return join(
         process.env.XDG_DATA_HOME ?? join(home, ".local", "share"),
-        "codexdc",
+        "codex-dc",
       );
   }
 }

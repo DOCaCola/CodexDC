@@ -19,7 +19,6 @@ import * as tar from "tar";
 import { discoverTweaks, type DiscoveredTweak } from "./tweak-discovery";
 import { createDiskStorage, type DiskStorage } from "./storage";
 import { syncManagedMcpServers } from "./mcp-sync";
-import { getWatcherHealth } from "./watcher-health";
 import {
   isMainProcessTweakScope,
   reloadTweaks,
@@ -83,7 +82,7 @@ const INSTALLER_STATE_FILE = join(userRoot, "state.json");
 const UPDATE_MODE_FILE = join(userRoot, "update-mode.json");
 const SELF_UPDATE_STATE_FILE = join(userRoot, "self-update-state.json");
 const SIGNED_CODEX_BACKUP = join(userRoot, "backup", "Codex.app");
-const CODEXDC_VERSION = "1.0.0";
+const CODEXDC_VERSION = "1.0.1";
 const CODEXDC_REPO = "DOCaCola/CodexDC";
 const TWEAK_STORE_INDEX_URL = process.env.CODEXDC_STORE_INDEX_URL ?? DEFAULT_TWEAK_STORE_INDEX_URL;
 const CODEX_WINDOW_SERVICES_KEY = "__codexpp_window_services__";
@@ -704,7 +703,7 @@ ipcMain.handle("codexpp:set-tweak-enabled", (_e, id: string, enabled: boolean) =
 ipcMain.handle("codexpp:get-config", () => {
   const s = readState();
   const installerState = readInstallerState();
-  const sourceRoot = installerState?.sourceRoot ?? fallbackSourceRoot();
+  const sourceRoot = installerState?.sourceRoot ?? null;
   return {
     version: CODEXDC_VERSION,
     autoUpdate: s.codexPlusPlus?.autoUpdate !== false,
@@ -745,7 +744,6 @@ ipcMain.handle("codexpp:run-codexpp-update", async () => {
   throw new Error("Close CodexDC after finishing active tasks, then run Setup → Update CodexDC.");
 });
 
-ipcMain.handle("codexpp:get-watcher-health", () => getWatcherHealth(userRoot!));
 
 ipcMain.handle("codexpp:get-tweak-store", async () => {
   const store = await fetchTweakStoreRegistry();
@@ -1653,17 +1651,6 @@ function compareVersions(a: string, b: string): number {
     if (diff !== 0) return diff;
   }
   return 0;
-}
-
-function fallbackSourceRoot(): string | null {
-  const candidates = [
-    join(homedir(), ".codexdc", "source"),
-    join(userRoot!, "source"),
-  ];
-  for (const candidate of candidates) {
-    if (existsSync(join(candidate, "packages", "installer", "dist", "cli.js"))) return candidate;
-  }
-  return null;
 }
 
 function describeInstallationSource(sourceRoot: string | null): InstallationSource {

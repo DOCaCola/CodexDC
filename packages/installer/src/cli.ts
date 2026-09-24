@@ -31,7 +31,6 @@ interface InstallCliOpts {
   local?: boolean;
   localSigning?: boolean;
   "local-signing"?: boolean;
-  watcher?: boolean;
   verbose?: boolean;
 }
 
@@ -42,7 +41,6 @@ interface RepairCliOpts {
   local?: boolean;
   localSigning?: boolean;
   "local-signing"?: boolean;
-  watcher?: boolean;
 }
 
 function wrap<T extends (...args: never[]) => unknown | Promise<unknown>>(fn: T): T {
@@ -128,13 +126,12 @@ prog
   .option("--resign", "Code sign Codex.app on macOS", true)
   .option("--local", "Use a stable local signing identity on macOS")
   .option("--local-signing", "Alias for --local")
-  .option("--watcher", "Install the auto-repair watcher", true)
   .option("--verbose", "Show low-level patching details")
   .action(wrap(runInstall));
 
 prog
   .command("uninstall")
-  .describe("Remove the managed CodexDC app and watcher")
+  .describe("Remove the managed CodexDC app")
   .option("--app", "Path to Codex.app / install dir")
   .option("--purge", "Delete tweaks, config, logs, backups, and CodexDC user data")
   .action(wrap(async (opts: { purge?: boolean }) => process.platform === "darwin" ? uninstallManagedMac() : uninstall(opts)));
@@ -147,7 +144,6 @@ prog
   .option("--force", "Re-apply even if the patch appears intact")
   .option("--local", "Use a stable local signing identity on macOS")
   .option("--local-signing", "Alias for --local")
-  .option("--watcher", "Run from the auto-repair watcher")
   .action(wrap(runRepair));
 
 prog
@@ -169,9 +165,7 @@ prog
   .describe("Install the latest stable CodexDC maintenance package")
   .option("--repo", "GitHub repo to download; omit to keep the current local source")
   .option("--ref", "Git ref to download (default: latest GitHub release)")
-  .option("--repair", "Run repair after updating", true)
   .option("--quiet", "Suppress non-error output")
-  .option("--watcher", "Run in watcher mode and respect automatic refresh settings")
   .option("--force", "Download a release package even if the selected release is already installed")
   .action(wrap(selfUpdate));
 
@@ -180,9 +174,7 @@ prog
   .describe("Alias for update")
   .option("--repo", "GitHub repo to download; omit to keep the current local source")
   .option("--ref", "Git ref to download (default: latest GitHub release)")
-  .option("--repair", "Run repair after updating", true)
   .option("--quiet", "Suppress non-error output")
-  .option("--watcher", "Run in watcher mode and respect automatic refresh settings")
   .option("--force", "Download a release package even if the selected release is already installed")
   .action(wrap(selfUpdate));
 

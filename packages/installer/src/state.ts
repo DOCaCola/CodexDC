@@ -40,8 +40,6 @@ export interface InstallerState {
   signingIdentityHash?: string;
   /** Original entry point ("main" field) of the asar's package.json. */
   originalEntryPoint: string;
-  /** Watcher install method, if any. */
-  watcher: "launchd" | "login-item" | "scheduled-task" | "systemd" | "none";
   /** Source tree that owns the installed CLI/runtime. */
   sourceRoot?: string;
   /** Last time the user-dir runtime assets were refreshed by repair. */

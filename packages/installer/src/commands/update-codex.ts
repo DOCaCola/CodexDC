@@ -8,5 +8,5 @@ export async function updateCodex(_opts: { app?: string } = {}): Promise<void> {
   const state = readState(userPaths().stateFile);
   if (!state?.managedCopy || !state.officialAppRoot) throw new Error("Install a managed CodexDC app first.");
   execFileSync("open", [state.officialAppRoot], { stdio: "ignore" });
-  console.log("Update official Codex using its menu, close both apps, then run CodexDC Repair. The watcher also detects the installed update.");
+  console.log("Update official Codex using its menu, close both apps, then launch CodexDC to refresh its managed copy.");
 }

@@ -12,9 +12,9 @@ import { locateCodex } from "./platform.js";
 import { readPlist, writePlist } from "./plist.js";
 import { ensureUserPaths } from "./paths.js";
 import { readState, writeState } from "./state.js";
-import { installWatcher, uninstallWatcher } from "./watcher.js";
 
 export const MANAGED_MAC_ID = "io.github.docacola.codexdc";
+function stagedSourceRoot(): string { return resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", ".."); }
 const assets = resolve(dirname(fileURLToPath(import.meta.url)), "..", "assets");
 
 export async function installManagedMac(opts: { app?: string; force?: boolean; quiet?: boolean } = {}): Promise<void> {
@@ -64,9 +64,10 @@ export async function installManagedMac(opts: { app?: string; force?: boolean; q
     info.SUAllowsAutomaticUpdates = false;
     writePlist(infoPath, info);
     writeFileSync(join(stage, "Contents", "Resources", "codexdc-launch.json"), JSON.stringify({
-      backendFile: join(paths.root, "backend.json"), originalExecutable: original,
+      originalExecutable: original, userRoot: paths.root, maintenanceNode: process.execPath,
+      maintenanceCli: join(stagedSourceRoot(), "packages", "installer", "dist", "cli.js"),
     }));
-    await install({ app: stage, resign: false, watcher: false, quiet: opts.quiet });
+    await install({ app: stage, resign: false, quiet: opts.quiet });
     signCodexApp(stage, { useLocalIdentity: true, preparedIdentity: identity });
     if (!verifySignature(stage).ok) throw new Error("Managed app signature verification failed");
     const stagedState = readState(paths.stateFile)!;
@@ -80,8 +81,7 @@ export async function installManagedMac(opts: { app?: string; force?: boolean; q
     writeState(paths.stateFile, { ...stagedState, appRoot: destination, officialAppRoot: source.appRoot,
       sourceAsarHash: sourceHash, managedCopy: true, resigned: true, signingMode: "local-identity",
       signingIdentity: identity!.name, signingIdentityHash: identity!.hash, nodePath: process.execPath,
-      codexChannel: source.channel, watcher: "launchd" });
-    installWatcher(source.appRoot);
+      codexChannel: source.channel });
     console.log(`CodexDC installed at ${destination}`);
   } catch (error) {
     if (activated) {
@@ -94,10 +94,6 @@ export async function installManagedMac(opts: { app?: string; force?: boolean; q
     cpSync(join(recovery, "bin"), paths.binDir, { recursive: true });
     if (oldState) writeFileSync(paths.stateFile, oldState);
     else rmSync(paths.stateFile, { force: true });
-    if (activated) {
-      uninstallWatcher();
-      if (previous?.officialAppRoot && previous.watcher !== "none") installWatcher(previous.officialAppRoot);
-    }
     throw error;
   } finally {
     rmSync(stage, { recursive: true, force: true });
@@ -114,7 +110,6 @@ export function uninstallManagedMac(): void {
   if (existsSync(state.appRoot) && readPlist(join(state.appRoot, "Contents", "Info.plist")).CFBundleIdentifier !== MANAGED_MAC_ID) {
     throw new Error("Recorded app is not CodexDC; refusing to remove it.");
   }
-  uninstallWatcher();
   rmSync(state.appRoot, { recursive: true, force: true });
   rmSync(`${state.appRoot}.previous`, { recursive: true, force: true });
   rmSync(paths.runtime, { recursive: true, force: true });

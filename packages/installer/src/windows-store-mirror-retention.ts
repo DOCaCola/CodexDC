@@ -2,7 +2,7 @@ import { readdirSync, rmSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
 const STORE_APPS_DIR = "store-apps";
-const MANAGED_ROOT_DIR = "codexdc";
+const MANAGED_ROOT_DIR = "codex-dc";
 const STORE_PACKAGE_VERSION = /_(\d+(?:\.\d+)+)_[^_]+__/i;
 
 export interface WindowsStoreMirrorRetentionResult {
