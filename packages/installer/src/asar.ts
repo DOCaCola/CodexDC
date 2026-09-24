@@ -1,8 +1,8 @@
 /**
  * asar helpers. We don't crack open the binary header ourselves; we use
- * @electron/asar which is well-maintained and matches the format Electron expects.
+ * @electron/asar which is well-maintained and matches the desktop archive format.
  *
- * The integrity hash Electron checks is the SHA-256 of the asar **header JSON**
+ * The integrity hash the host checks is the SHA-256 of the asar **header JSON**
  * (the leading length-prefixed JSON blob), not the entire file. @electron/asar
  * exposes this via `getRawHeader()`.
  */
@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 export interface AsarHeaderInfo {
-  /** SHA-256 hex of the header JSON bytes Electron hashes. */
+  /** SHA-256 hex of the header JSON bytes the host hashes. */
   headerHash: string;
   /** The decoded header object (the directory tree). */
   header: unknown;
@@ -35,7 +35,7 @@ export function readHeaderHash(asarPath: string): AsarHeaderInfo {
  * Returns the new header hash post-repack.
  *
  * We must preserve the original asar's unpacked-file set EXACTLY: marking a
- * file `unpacked: true` in the header tells Electron to read it from
+ * file `unpacked: true` in the header tells the host to read it from
  * `app.asar.unpacked/` instead of inline. If we accidentally mark a file
  * unpacked that isn't actually present in the .unpacked/ sibling dir,
  * `require` will fail with MODULE_NOT_FOUND.
@@ -107,7 +107,7 @@ function isTransientCleanupError(error: unknown): boolean {
  * falling back to unpack for individual files.
  *
  * Why this matters: if the header marks a file `unpacked: true` but the file
- * isn't on disk under `app.asar.unpacked/`, Electron's resolver throws
+ * isn't on disk under `app.asar.unpacked/`, the host resolver throws
  * MODULE_NOT_FOUND when something requires the module. The current Owl app also
  * has hundreds of unpacked files, so preserving each file with one giant glob
  * can exceed minimatch's pattern length limit.

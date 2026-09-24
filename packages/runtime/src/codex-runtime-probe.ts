@@ -96,19 +96,10 @@ function detectRuntimeType(): CodexRuntimeType {
     if (appRoot && existsSync(join(appRoot, "Contents", "Frameworks", "Codex Framework.framework"))) {
       return "owl";
     }
-    if (
-      appRoot &&
-      existsSync(join(appRoot, "Contents", "Frameworks", "Electron Framework.framework"))
-    ) {
-      return "electron";
-    }
-    if (process.resourcesPath && existsSync(join(process.resourcesPath, "app.asar"))) {
-      return "electron";
-    }
     return "unknown";
   }
   return process.resourcesPath && existsSync(join(process.resourcesPath, "app.asar"))
-    ? "electron"
+    ? "owl"
     : "unknown";
 }
 

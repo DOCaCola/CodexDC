@@ -1,7 +1,7 @@
 import { contextBridge } from "electron";
 
 /**
- * React runs in the page's main world while CodexDC runs in Electron's isolated
+ * React runs in the page's main world while CodexDC runs in the host's isolated
  * preload world. The main-world bridge serializes the owner chain for a DOM
  * node so renderer tweaks can inspect stable React props without bundle patches.
  */

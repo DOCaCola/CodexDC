@@ -10,7 +10,6 @@ import { locateCodex, type CodexInstall } from "../platform.js";
 import { ensureUserPaths } from "../paths.js";
 import { backupOnce, patchAsar, readFileInAsar, readHeaderHash } from "../asar.js";
 import { prepareIntegrityUpdate } from "../integrity.js";
-import { readFuses, writeFuse } from "../fuses.js";
 import { clearQuarantine, prepareCodeSigning, signCodexApp, signatureInfo } from "../codesign.js";
 import { readPlist } from "../plist.js";
 import { writeState } from "../state.js";
@@ -36,7 +35,6 @@ import { managedStorePackageRoot, pruneWindowsStoreMirrors } from "../windows-st
 
 interface Opts {
   app?: string;
-  fuse?: boolean; // sade --no-fuse → fuse: false
   resign?: boolean;
   localSigning?: boolean;
   quiet?: boolean;
@@ -48,7 +46,6 @@ const assetsDir = resolve(here, "..", "..", "assets");
 const sourceRoot = findSourceRoot(here);
 
 export async function install(opts: Opts = {}): Promise<void> {
-  const wantsFuseFlip = opts.fuse !== false;
   const resign = opts.resign !== false;
   let localSigning = opts.localSigning === true;
 
@@ -60,12 +57,8 @@ export async function install(opts: Opts = {}): Promise<void> {
   const integrityPlan = prepareIntegrityUpdate(codex, originalAsarHash, {
     allowMismatch: hasPatchMarker,
   });
-  const fuseFlip = shouldFlipElectronFuse(codex, wantsFuseFlip);
   const codexVersion = readCodexVersion(codex.metaPath);
   step(`Codex: ${kleur.cyan(codex.appRoot)}${codexVersion ? ` (${kleur.cyan(codexVersion)}, ${codex.channel})` : ` (${codex.channel})`}`);
-  if (wantsFuseFlip && !fuseFlip) {
-    step.detail("Skipping Electron fuse flip; Electron Framework binary was not found");
-  }
   preflightSystemTools(codex.platform, resign, codex.metaPath !== null);
   step("Preparing selected Codex CLI");
   await prepareBackend();
@@ -80,7 +73,6 @@ export async function install(opts: Opts = {}): Promise<void> {
   // Pre-flight every app-bundle target we will mutate so permission failures
   // surface before we patch app.asar or touch backups.
   preflightWritableTargets(codex, {
-    fuseFlip,
     integrityUpdate: integrityPlan !== null,
   });
   step.detail("Bundle writable");
@@ -109,7 +101,6 @@ export async function install(opts: Opts = {}): Promise<void> {
   const backupAsar = join(paths.backup, "app.asar");
   const backupAsarUnpacked = join(paths.backup, "app.asar.unpacked");
   const backupPlist = codex.metaPath ? join(paths.backup, "Info.plist") : null;
-  const backupFramework = join(paths.backup, "Electron Framework");
   let appBackupRefreshed = false;
   if (pristineAppBackup) {
     appBackupRefreshed = backupUnpatchedApp(codex.appRoot, pristineAppBackup, {
@@ -122,7 +113,6 @@ export async function install(opts: Opts = {}): Promise<void> {
     backupOnce(`${codex.asarPath}.unpacked`, backupAsarUnpacked);
   }
   if (codex.metaPath && backupPlist) backupOnce(codex.metaPath, backupPlist);
-  if (fuseFlip) backupOnce(codex.electronBinary, backupFramework);
   step(appBackupRefreshed ? "Backup refreshed" : "Backup ready");
 
   // 2. Stage runtime + loader into the user dir.
@@ -149,24 +139,9 @@ export async function install(opts: Opts = {}): Promise<void> {
     );
   }
 
-  // 5. Belt-and-suspenders: flip the integrity validation fuse off.
-  let fuseFlipped = false;
-  if (fuseFlip) {
-    try {
-      const r = writeFuse(
-        codex.electronBinary,
-        "EnableEmbeddedAsarIntegrityValidation",
-        "off",
-      );
-      step.detail(`Fuse EnableEmbeddedAsarIntegrityValidation: ${r.from} → ${r.to}`);
-      fuseFlipped = true;
-    } catch (e) {
-      console.warn(kleur.yellow(`Fuse flip failed: ${(e as Error).message}`));
-    }
-  }
   step("App patched");
 
-  // 6. Re-sign on macOS.
+  // 5. Re-sign on macOS.
   let resigned = false;
   let signingMode: "local-identity" | "adhoc" | undefined;
   let signingIdentity: string | undefined;
@@ -191,7 +166,7 @@ export async function install(opts: Opts = {}): Promise<void> {
   }
 
 
-  // 8. Persist state.
+  // 6. Persist state.
   writeState(paths.stateFile, {
     version: CODEXDC_VERSION,
     installedAt: new Date().toISOString(),
@@ -203,7 +178,6 @@ export async function install(opts: Opts = {}): Promise<void> {
     codexBundleId: codex.bundleId,
     appUserModelId: codex.appUserModelId,
     integrityUpdated: integrityUpdate?.changed === true,
-    fuseFlipped,
     resigned,
     signingMode,
     signingIdentity,
@@ -260,19 +234,6 @@ export function readCodexVersion(metaPath: string | null): string | null {
     return (pl["CFBundleShortVersionString"] as string) ?? null;
   } catch {
     return null;
-  }
-}
-
-export function shouldFlipElectronFuse(
-  codex: Pick<CodexInstall, "electronBinary">,
-  requested: boolean,
-): boolean {
-  if (!requested || !existsSync(codex.electronBinary)) return false;
-  try {
-    readFuses(codex.electronBinary);
-    return true;
-  } catch {
-    return false;
   }
 }
 
@@ -694,14 +655,14 @@ function formatCliStep(message: string): string {
 }
 
 export function preflightWritableTargets(
-  codex: Pick<CodexInstall, "resourcesDir" | "asarPath" | "metaPath" | "electronBinary" | "platform">,
-  opts: { fuseFlip: boolean; integrityUpdate?: boolean },
+  codex: Pick<CodexInstall, "resourcesDir" | "asarPath" | "metaPath" | "executable" | "platform">,
+  opts: { integrityUpdate?: boolean },
 ): void {
   preflightWritableDirectory(codex.resourcesDir, codex.platform);
   preflightWritableFile(codex.asarPath, codex.platform);
   if (codex.metaPath) preflightWritableFile(codex.metaPath, codex.platform);
-  if (opts.fuseFlip || opts.integrityUpdate) {
-    preflightWritableFile(codex.electronBinary, codex.platform);
+  if (opts.integrityUpdate && codex.platform === "win32") {
+    preflightWritableFile(codex.executable, codex.platform);
   }
 }
 

@@ -441,9 +441,9 @@ export interface CodexApi {
 
   /**
    * Main-only: create an embedded BrowserView registered with Codex's host
-   * context. The returned object is Electron's BrowserView in the main
+   * context. The returned object is the host's BrowserView in the main
    * process, typed as unknown so renderer-only tweak bundles do not need
-   * Electron types.
+   * host API types.
    */
   createBrowserView(options: CodexCreateViewOptions): Promise<unknown>;
 
@@ -457,7 +457,7 @@ export interface CodexApi {
   createWindow(options: CodexCreateWindowOptions): Promise<CodexWindowRef>;
 }
 
-export type CodexRuntimeType = "owl" | "electron" | "unknown";
+export type CodexRuntimeType = "owl" | "unknown";
 
 export interface CodexRuntimeInfo {
   type: CodexRuntimeType;

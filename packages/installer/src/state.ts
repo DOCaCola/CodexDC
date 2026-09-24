@@ -28,8 +28,6 @@ export interface InstallerState {
   appUserModelId?: string | null;
   /** Whether host integrity metadata was rewritten for the patched ASAR. */
   integrityUpdated?: boolean;
-  /** Whether we flipped the Electron fuse. */
-  fuseFlipped: boolean;
   /** Whether we re-signed the patched app. */
   resigned: boolean;
   /** Signing mode used for the patched app. Older installs may not have this. */

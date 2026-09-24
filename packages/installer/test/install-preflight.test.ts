@@ -8,31 +8,43 @@ import {
   prepareCodexForPatching,
   preflightWritableTargets,
   shouldBackupUnpatchedApp,
-  shouldFlipElectronFuse,
 } from "../src/commands/install";
 import type { OpenReport } from "../src/commands/debug";
 import type { CodexInstall } from "../src/platform";
 
+test("macOS ASAR integrity preflight needs the plist, no framework binary", () => {
+  withTempDir((root) => {
+    const resourcesDir = join(root, "Contents", "Resources");
+    mkdirSync(resourcesDir, { recursive: true });
+    const asarPath = join(resourcesDir, "app.asar");
+    const metaPath = join(root, "Contents", "Info.plist");
+    writeFileSync(asarPath, "");
+    writeFileSync(metaPath, "");
+    preflightWritableTargets({ resourcesDir, asarPath, metaPath,
+      executable: join(root, "Codex"), platform: "darwin",
+    }, { integrityUpdate: true });
+  });
+});
+
+test("Windows ASAR integrity preflight requires the executable", () => {
+  withTempDir((root) => {
+    const asarPath = join(root, "app.asar");
+    writeFileSync(asarPath, "");
+    assert.throws(() => preflightWritableTargets({ resourcesDir: root, asarPath,
+      metaPath: null, executable: join(root, "missing.exe"), platform: "win32",
+    }, { integrityUpdate: true }), /ENOENT/);
+  });
+});
+
 test("install preflight checks Info.plist before patching", { skip: process.platform === "win32" }, () => {
   withTempDir((root) => {
     const resourcesDir = join(root, "Contents", "Resources");
-    const frameworkDir = join(
-      root,
-      "Contents",
-      "Frameworks",
-      "Electron Framework.framework",
-      "Versions",
-      "A",
-    );
     mkdirSync(resourcesDir, { recursive: true });
-    mkdirSync(frameworkDir, { recursive: true });
 
     const asarPath = join(resourcesDir, "app.asar");
     const metaPath = join(root, "Contents", "Info.plist");
-    const electronBinary = join(frameworkDir, "Electron Framework");
     writeFileSync(asarPath, "");
     writeFileSync(metaPath, "");
-    writeFileSync(electronBinary, "");
     chmodSync(metaPath, 0o444);
 
     try {
@@ -45,10 +57,10 @@ test("install preflight checks Info.plist before patching", { skip: process.plat
                 resourcesDir,
                 asarPath,
                 metaPath,
-                electronBinary,
+                executable: join(root, "app"),
                 platform: "darwin",
               },
-              { fuseFlip: true },
+              { integrityUpdate: true },
             );
           } catch (e) {
             error = e;
@@ -60,49 +72,6 @@ test("install preflight checks Info.plist before patching", { skip: process.plat
       assert.match(String(error), /codexdc repair/);
     } finally {
       chmodSync(metaPath, 0o644);
-    }
-  });
-});
-
-test("install preflight checks Electron Framework when fuse flip is enabled", { skip: process.platform === "win32" }, () => {
-  withTempDir((root) => {
-    const resourcesDir = join(root, "Contents", "Resources");
-    const frameworkDir = join(
-      root,
-      "Contents",
-      "Frameworks",
-      "Electron Framework.framework",
-      "Versions",
-      "A",
-    );
-    mkdirSync(resourcesDir, { recursive: true });
-    mkdirSync(frameworkDir, { recursive: true });
-
-    const asarPath = join(resourcesDir, "app.asar");
-    const metaPath = join(root, "Contents", "Info.plist");
-    const electronBinary = join(frameworkDir, "Electron Framework");
-    writeFileSync(asarPath, "");
-    writeFileSync(metaPath, "");
-    writeFileSync(electronBinary, "");
-    chmodSync(electronBinary, 0o444);
-
-    try {
-      assert.throws(
-        () =>
-          preflightWritableTargets(
-            {
-              resourcesDir,
-              asarPath,
-              metaPath,
-              electronBinary,
-              platform: "darwin",
-            },
-            { fuseFlip: true },
-          ),
-        /Cannot write to .*Electron Framework/,
-      );
-    } finally {
-      chmodSync(electronBinary, 0o644);
     }
   });
 });
@@ -149,25 +118,6 @@ test("install refreshes full app backup only for unpatched apps", () => {
     }),
     false,
   );
-});
-
-test("install skips Electron fuse flipping when the framework binary is missing", () => {
-  withTempDir((root) => {
-    const electronBinary = join(root, "Electron Framework");
-    assert.equal(shouldFlipElectronFuse({ electronBinary }, true), false);
-    writeFileSync(electronBinary, "");
-    assert.equal(shouldFlipElectronFuse({ electronBinary }, true), false);
-    writeFileSync(
-      electronBinary,
-      Buffer.concat([
-        Buffer.from("prefixdL7pKGdnNz796PbbjQWNKmHXBZaB9tsX", "ascii"),
-        Buffer.from([1, 8]),
-        Buffer.from("11111111", "ascii"),
-      ]),
-    );
-    assert.equal(shouldFlipElectronFuse({ electronBinary }, true), true);
-    assert.equal(shouldFlipElectronFuse({ electronBinary }, false), false);
-  });
 });
 
 test("install preflight allows patching when Codex is closed", () => {
@@ -289,7 +239,6 @@ function fakeCodex(): CodexInstall {
     resourcesDir: "/Applications/Codex.app/Contents/Resources",
     asarPath: "/Applications/Codex.app/Contents/Resources/app.asar",
     metaPath: "/Applications/Codex.app/Contents/Info.plist",
-    electronBinary: "/Applications/Codex.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework",
     executable: "/Applications/Codex.app/Contents/MacOS/Codex",
     appName: "Codex",
     bundleId: "com.openai.codex",
