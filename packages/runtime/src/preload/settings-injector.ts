@@ -6,6 +6,7 @@
  */
 
 import { ipcRenderer } from "electron";
+import { renderBackendSettings } from "./backend-settings";
 import type {
   SettingsSection,
   SettingsPage,
@@ -140,10 +141,10 @@ interface InjectorState {
   sections: Map<string, SettingsSection>;
   pages: Map<string, RegisteredPage>;
   listedTweaks: ListedTweak[];
-  /** Our "CodexDC" nav group (Config/Tweaks). */
+  /** Our "Codex-DC" nav group (Config/Tweaks). */
   navGroup: HTMLElement | null;
   navButtons: { config: HTMLButtonElement; tweaks: HTMLButtonElement; store: HTMLButtonElement } | null;
-  /** Sidebar update pill shown only when GitHub has a newer CodexDC release. */
+  /** Sidebar update pill shown only when GitHub has a newer Codex-DC release. */
   codexPlusPlusUpdateButton: HTMLButtonElement | null;
   /** Our "Tweaks" nav group (per-tweak pages). Created lazily. */
   pagesGroup: HTMLElement | null;
@@ -966,13 +967,13 @@ function rerender(): void {
 
   const title =
     ap.kind === "tweaks" ? "Tweaks" :
-    ap.kind === "store" ? "Tweak Store" : "CodexDC";
+    ap.kind === "store" ? "Tweak Store" : "Codex-DC";
   const subtitle =
     ap.kind === "tweaks"
-      ? "Manage your installed CodexDC tweaks."
+      ? "Manage your installed Codex-DC tweaks."
       : ap.kind === "store"
         ? "Install reviewed tweaks pinned to approved GitHub commits."
-        : "Checking installed CodexDC version.";
+        : "Checking installed Codex-DC version.";
   const root = panelShell(title, subtitle);
   host.appendChild(root.outer);
   if (ap.kind === "tweaks") renderTweaksPage(root.sectionsWrap);
@@ -988,10 +989,10 @@ function renderConfigPage(
 ): void {
   const section = document.createElement("section");
   section.className = "flex flex-col gap-2";
-  section.appendChild(sectionTitle("CodexDC Updates"));
+  section.appendChild(sectionTitle("Codex-DC Updates"));
   const card = roundedCard();
   card.dataset.codexppConfigCard = "true";
-  const loading = rowSimple("Loading update settings", "Checking current CodexDC configuration.");
+  const loading = rowSimple("Loading update settings", "Checking current Codex-DC configuration.");
   card.appendChild(loading);
   section.appendChild(card);
   sectionsWrap.appendChild(section);
@@ -1000,16 +1001,26 @@ function renderConfigPage(
     .invoke("codexpp:get-config")
     .then((config) => {
       if (subtitle) {
-        subtitle.textContent = `You have CodexDC ${(config as CodexPlusPlusConfig).version} installed.`;
+        subtitle.textContent = `You have Codex-DC ${(config as CodexPlusPlusConfig).version} installed.`;
       }
       card.textContent = "";
       renderCodexPlusPlusConfig(card, config as CodexPlusPlusConfig);
     })
     .catch((e) => {
-      if (subtitle) subtitle.textContent = "Could not load installed CodexDC version.";
+      if (subtitle) subtitle.textContent = "Could not load installed Codex-DC version.";
       card.textContent = "";
       card.appendChild(rowSimple("Could not load update settings", String(e)));
     });
+
+  const backend = document.createElement("section");
+  backend.className = "flex flex-col gap-2";
+  backend.appendChild(sectionTitle("Codex CLI"));
+  const backendCard = roundedCard();
+  const backendBody = document.createElement("div");
+  renderBackendSettings(backendBody);
+  backendCard.appendChild(backendBody);
+  backend.appendChild(backendCard);
+  sectionsWrap.appendChild(backend);
 
   const maintenance = document.createElement("section");
   maintenance.className = "flex flex-col gap-2";
@@ -1038,10 +1049,10 @@ function autoUpdateRow(config: CodexPlusPlusConfig): HTMLElement {
   left.className = "flex min-w-0 flex-col gap-1";
   const title = document.createElement("div");
   title.className = "min-w-0 text-sm text-default";
-  title.textContent = "Update CodexDC on launch";
+  title.textContent = "Update Codex-DC on launch";
   const desc = document.createElement("div");
   desc.className = "text-secondary min-w-0 text-sm";
-  desc.textContent = `Installed version v${config.version}. Checks for stable patcher updates when CodexDC launches. No scheduled background tasks.`;
+  desc.textContent = `Installed version v${config.version}. Checks for stable patcher updates when Codex-DC launches. No scheduled background tasks.`;
   left.appendChild(title);
   left.appendChild(desc);
   row.appendChild(left);
@@ -1103,7 +1114,7 @@ function installationSourceRow(source: InstallationSource): HTMLElement {
 }
 
 function selfUpdateStatusRow(state: SelfUpdateState | null): HTMLElement {
-  const row = rowSimple("Last CodexDC update", selfUpdateSummary(state));
+  const row = rowSimple("Last Codex-DC update", selfUpdateSummary(state));
   const left = row.firstElementChild as HTMLElement | null;
   if (left && state) left.prepend(statusBadge(selfUpdateStatusTone(state.status), selfUpdateStatusLabel(state.status)));
   return row;
@@ -1117,7 +1128,7 @@ function checkForUpdatesRow(config: CodexPlusPlusConfig): HTMLElement {
   left.className = "flex min-w-0 flex-col gap-1";
   const title = document.createElement("div");
   title.className = "min-w-0 text-sm text-default";
-  title.textContent = check?.updateAvailable ? "CodexDC update available" : "Check for CodexDC updates";
+  title.textContent = check?.updateAvailable ? "Codex-DC update available" : "Check for Codex-DC updates";
   const desc = document.createElement("div");
   desc.className = "text-secondary min-w-0 text-sm";
   desc.textContent = updateSummary(check);
@@ -1143,7 +1154,7 @@ function checkForUpdatesRow(config: CodexPlusPlusConfig): HTMLElement {
           setSidebarCodexPlusPlusUpdateButton(check as CodexPlusPlusUpdateCheck);
           refreshConfigCard(row);
         })
-        .catch((e) => plog("CodexDC release check failed", String(e)))
+        .catch((e) => plog("Codex-DC release check failed", String(e)))
         .finally(() => {
           row.style.opacity = "";
         });
@@ -1161,7 +1172,7 @@ function checkForUpdatesRow(config: CodexPlusPlusConfig): HTMLElement {
           refreshConfigCard(row);
         })
         .catch((e) => {
-          plog("CodexDC self-update failed", String(e));
+          plog("Codex-DC self-update failed", String(e));
           void refreshConfigCard(row);
         })
         .finally(() => {
@@ -1364,7 +1375,7 @@ function updateChannelSummary(config: CodexPlusPlusConfig): string {
 }
 
 function selfUpdateSummary(state: SelfUpdateState | null): string {
-  if (!state) return "No automatic CodexDC update has run yet.";
+  if (!state) return "No automatic Codex-DC update has run yet.";
   const checked = new Date(state.completedAt ?? state.checkedAt).toLocaleString();
   const target = state.latestVersion ? ` Target v${state.latestVersion}.` : state.targetRef ? ` Target ${state.targetRef}.` : "";
   const source = state.installationSource?.label ?? "unknown source";
@@ -1393,7 +1404,7 @@ function refreshConfigCard(row: HTMLElement): void {
   const card = row.closest("[data-codexpp-config-card]") as HTMLElement | null;
   if (!card) return;
   card.textContent = "";
-  card.appendChild(rowSimple("Refreshing", "Loading current CodexDC update status."));
+  card.appendChild(rowSimple("Refreshing", "Loading current Codex-DC update status."));
   void ipcRenderer
     .invoke("codexpp:get-config")
     .then((config) => {
@@ -1407,7 +1418,7 @@ function refreshConfigCard(row: HTMLElement): void {
 }
 
 function uninstallRow(): HTMLElement {
-  return rowSimple("Uninstall CodexDC", "Quit CodexDC, open its Setup launcher, and choose Uninstall CodexDC.");
+  return rowSimple("Uninstall Codex-DC", "Quit Codex-DC, open its Setup launcher, and choose Uninstall Codex-DC.");
 }
 
 function reportBugRow(): HTMLElement {
@@ -1427,12 +1438,12 @@ function reportBugRow(): HTMLElement {
           "1. ",
           "",
           "## Environment",
-          "- CodexDC version: ",
+          "- Codex-DC version: ",
           "- Codex app version: ",
           "- OS: ",
           "",
           "## Logs",
-          "Attach relevant lines from the CodexDC log directory.",
+          "Attach relevant lines from the Codex-DC log directory.",
         ].join("\n"),
       );
       void ipcRenderer.invoke(
@@ -1665,7 +1676,7 @@ function platformLockedLabel(platform: NonNullable<TweakStoreEntryView["platform
 }
 
 function runtimeLockedLabel(runtime: NonNullable<TweakStoreEntryView["runtime"]>): string {
-  return runtime.required ? `Requires CodexDC ${runtime.required}` : "Requires newer CodexDC";
+  return runtime.required ? `Requires Codex-DC ${runtime.required}` : "Requires newer Codex-DC";
 }
 
 function showStoreCardMessage(card: HTMLElement, message: string): void {
@@ -1869,7 +1880,7 @@ function sidebarUpdatePillButton(): HTMLButtonElement {
     boxShadow: "0 1px 2px rgba(0, 0, 0, 0.18)",
   });
   btn.textContent = "Update";
-  btn.title = "Open CodexDC update";
+  btn.title = "Open Codex-DC update";
   btn.addEventListener("mouseenter", () => {
     btn.style.background = "#0071E3";
   });
@@ -1891,7 +1902,7 @@ function refreshSidebarCodexPlusPlusUpdateButton(force = false): void {
     .invoke("codexpp:check-codexpp-update", force)
     .then((check) => setSidebarCodexPlusPlusUpdateButton(check as CodexPlusPlusUpdateCheck))
     .catch((e) => {
-      plog("CodexDC sidebar release check failed", String(e));
+      plog("Codex-DC sidebar release check failed", String(e));
       setSidebarCodexPlusPlusUpdateButton(null);
     });
 }
@@ -1905,8 +1916,8 @@ function setSidebarCodexPlusPlusUpdateButton(check: CodexPlusPlusUpdateCheck | n
   btn.dataset.codexppReleaseUrl = check?.releaseUrl || CODEXDC_RELEASES_URL;
   btn.title =
     updateAvailable && check?.latestVersion
-      ? `Open CodexDC ${check.latestVersion} update`
-      : "Open CodexDC update";
+      ? `Open Codex-DC ${check.latestVersion} update`
+      : "Open Codex-DC update";
 }
 
 function updateStoreUpdateBadge(count: number | null): void {
@@ -2466,7 +2477,7 @@ function openPublishTweakDialog(): void {
   title.textContent = "Publish Tweak";
   const subtitle = document.createElement("div");
   subtitle.className = "text-sm text-secondary";
-  subtitle.textContent = "Submit a GitHub repo for admin review. CodexDC records the exact commit admins must review and pin.";
+  subtitle.textContent = "Submit a GitHub repo for admin review. Codex-DC records the exact commit admins must review and pin.";
   titleStack.appendChild(title);
   titleStack.appendChild(subtitle);
   header.appendChild(titleStack);

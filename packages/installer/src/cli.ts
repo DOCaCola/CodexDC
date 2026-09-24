@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { findSourceRoot } from "./source-root.js";
 import { forwardToActivePackage } from "./active-package.js";
 import { manager } from "./commands/manager.js";
-import { backendState, checkBackend, installBackend, selectBackend, rollbackBackend, configureDevelopmentBackend } from "./backend.js";
+import { backendState, checkBackend, installBackend, selectAvailableBackend, rollbackBackend, configureDevelopmentBackend } from "./backend.js";
 import { launchManaged } from "./launch.js";
 import { installManagedMac, uninstallManagedMac } from "./managed-mac.js";
 import kleur from "kleur";
@@ -243,7 +243,7 @@ prog.command("backend <action> [provider]").describe("CLI backend: status, check
       case "status": result = backendState(); break;
       case "check": result = await checkBackend(); break;
       case "install": result = await installBackend(); break;
-      case "select": result = selectBackend(provider ?? ""); break;
+      case "select": result = await selectAvailableBackend(provider ?? ""); break;
       case "develop": result = await configureDevelopmentBackend(provider ?? ""); break;
       case "rollback": result = rollbackBackend(); break;
       default: throw new Error("Unknown backend action");

@@ -349,7 +349,7 @@ test("patch failure report URL includes a prefilled GitHub issue", () => {
   const url = new URL(buildPatchFailureIssueUrl("Codex window services hook point not found"));
 
   assert.equal(url.origin + url.pathname, "https://github.com/DOCaCola/CodexDC/issues/new");
-  assert.equal(url.searchParams.get("title"), "CodexDC failed to patch Codex after update");
+  assert.equal(url.searchParams.get("title"), "Codex-DC failed to patch Codex after update");
   assert.match(url.searchParams.get("body") ?? "", /Codex window services hook point not found/);
   assert.match(url.searchParams.get("body") ?? "", /Platform:/);
 });
@@ -358,10 +358,10 @@ test("CLI failure report URL includes command and environment details", () => {
   const url = new URL(buildCliFailureIssueUrl("install", "codesign not installed"));
 
   assert.equal(url.origin + url.pathname, "https://github.com/DOCaCola/CodexDC/issues/new");
-  assert.equal(url.searchParams.get("title"), "CodexDC install failed");
+  assert.equal(url.searchParams.get("title"), "Codex-DC install failed");
   assert.match(url.searchParams.get("body") ?? "", /codexdc install/);
   assert.match(url.searchParams.get("body") ?? "", /codesign not installed/);
-  assert.match(url.searchParams.get("body") ?? "", /CodexDC:/);
+  assert.match(url.searchParams.get("body") ?? "", /Codex-DC:/);
   assert.match(url.searchParams.get("body") ?? "", /Node:/);
 });
 

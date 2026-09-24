@@ -14,7 +14,7 @@ try {
   const options = { cwd: tmpdir(), encoding: "utf8", env: { ...process.env, CODEXDC_HOME: join(stage, "smoke-home") } };
   mkdirSync(options.env.CODEXDC_HOME, { recursive: true });
   execFileSync(node, [cli, "--help"], options);
-  assert.deepEqual(JSON.parse(execFileSync(node, [cli, "backend", "status"], options)), { provider: "bundled" });
+  assert.deepEqual(JSON.parse(execFileSync(node, [cli, "backend", "status"], options)), { provider: "fork" });
   const tweak = join(stage, "development tweak");
   mkdirSync(tweak);
   writeFileSync(join(tweak, "manifest.json"), JSON.stringify({
@@ -48,7 +48,7 @@ try {
   const candidate = JSON.parse(execFileSync(node, [cli, "backend", "status"], {
     ...options, env: { ...options.env, CODEXDC_ACTIVATING: "1" },
   }));
-  assert.deepEqual(candidate, { provider: "bundled" });
+  assert.deepEqual(candidate, { provider: "fork" });
   console.log("Extracted package passed: bundled runtime, repeated launch forwarding, and candidate activation bypass.");
 } finally {
   rmSync(stage, { recursive: true, force: true });

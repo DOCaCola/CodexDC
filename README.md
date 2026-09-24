@@ -1,4 +1,4 @@
-# CodexDC
+# Codex-DC
 
 A separate, locally patched Codex desktop with optional tweaks and a selectable
 CLI backend. Independent project derived from Codex++; not an official OpenAI app.
@@ -44,19 +44,26 @@ versions and updates. Core app maintenance continues with optional tweaks disabl
 
 ## Codex CLI selection
 
-Use **Settings → Codex CLI**, or Setup → Choose Codex CLI backend:
+Use **Settings → Codex-DC → Config → Codex CLI**, or Setup → Choose Codex CLI backend:
 
-- **Desktop bundled** is the default.
-- **DC fork** downloads the complete latest stable `DOCaCola/codex` release,
+- **DC fork (default)** downloads the complete latest stable `DOCaCola/codex` release,
   checks its SHA-256, and probes app-server initialization before making it available.
+- **Desktop bundled (stock)** uses the CLI supplied with the desktop.
+- **Local path** uses a validated executable directly, without copying your build.
 
-Use **Install / update DC fork**, then **Use DC fork**. Quit and reopen CodexDC after
+Choose a source and **Save CLI selection**. Selecting DC fork installs it when needed.
+Setup also prepares it by default. Existing saved selections take precedence; on first
+setup an explicit `CODEX_CLI_PATH` override is validated and saved as **Local path**.
+The normal system PATH is not used to guess a backend.
+
+Use **Install / update DC fork** to refresh a downloaded release. Quit and reopen Codex-DC after
 finishing active tasks. Settings shows the running path separately from the saved
 selection. You can explicitly switch back or select the previous fork version.
 The bundled executable and system PATH are not replaced.
 
 The Windows fork release includes hpatch, sandbox helpers, the code-mode host and
-ripgrep. Its Mac package is not yet available; Mac users can use Desktop bundled.
+ripgrep. Its Mac package is not yet available; Mac users must select **Desktop bundled (stock)**
+or **Local path** in Setup before installing. There is no automatic fallback.
 Missing releases or failed validation produce a clear error and retain your selection.
 The startup probe does not certify every desktop feature against every CLI version.
 
@@ -106,7 +113,7 @@ npm run package
 For a development install, run `node bin/codexdc.js install` from this checkout.
 Link each local tweak with `node bin/codexdc.js dev <tweak-directory> --no-watch`.
 Select a locally built CLI with `node bin/codexdc.js backend develop <executable>`,
-or use Setup → Choose Codex CLI backend → Use a local development CLI.
+or use Setup → Choose Codex CLI backend → Local path.
 The executable remains at its build location. Rebuild the patcher with `npm run build`,
 close CodexDC, and run `node bin/codexdc.js repair --force` to refresh the managed app.
 Source checkouts use Git updates; automatic release updates are disabled.

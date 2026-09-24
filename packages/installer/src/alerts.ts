@@ -17,9 +17,9 @@ export function showPatchFailedAlert(errorMessage: string): void {
   }
 
   const button = showAlert({
-    title: "CodexDC could not patch Codex",
+    title: "Codex-DC could not patch Codex",
     message:
-      "Codex was updated, but CodexDC could not reapply itself automatically.\n\n" +
+      "Codex was updated, but Codex-DC could not reapply itself automatically.\n\n" +
       `${errorMessage}\n\n` +
       "Run codexdc repair from Terminal after Codex finishes updating, or report this failure on GitHub.",
     buttons: ["Dismiss", "Report on GitHub"],
@@ -34,7 +34,7 @@ export function showPatchFailedAlert(errorMessage: string): void {
 
 function showAppManagementPatchFailedAlert(errorMessage: string): void {
   const button = showAlert({
-    title: "CodexDC needs app repair",
+    title: "Codex-DC needs app repair",
     message: 'Run "codexdc repair" in your terminal.',
     buttons: ["Dismiss", "Report Issue on GitHub"],
     defaultButton: "Dismiss",
@@ -50,11 +50,11 @@ export function showUpdateModePausedAlert(appRoot: string, codexVersion: string 
   if (platform() !== "darwin") return;
 
   showAlert({
-    title: "CodexDC is waiting for Codex to update",
+    title: "Codex-DC is waiting for Codex to update",
     message:
-      "CodexDC is paused while Codex installs its update.\n\n" +
+      "Codex-DC is paused while Codex installs its update.\n\n" +
       `Current Codex: ${codexVersion ?? "unknown"}\n\n` +
-      "After the update finishes, CodexDC will patch itself again.",
+      "After the update finishes, Codex-DC will patch itself again.",
     buttons: ["OK"],
     defaultButton: "OK",
     timeoutSeconds: 20,
@@ -67,7 +67,7 @@ export function showCodexUpdateDetectedNotification(): void {
 
   showNotification({
     title: "Codex update detected",
-    message: "CodexDC is checking the app, then it will patch itself.",
+    message: "Codex-DC is checking the app, then it will patch itself.",
   });
 }
 
@@ -75,10 +75,10 @@ export function promptRestartCodexAfterPatch(appRoot: string): void {
   if (platform() !== "darwin") return;
 
   const button = showAlert({
-    title: "CodexDC needs to restart Codex",
+    title: "Codex-DC needs to restart Codex",
     message:
-      "CodexDC re-patched Codex on disk, but the open Codex window is still running the old app code.\n\n" +
-      "Restart Codex now to finish loading CodexDC.",
+      "Codex-DC re-patched Codex on disk, but the open Codex window is still running the old app code.\n\n" +
+      "Restart Codex now to finish loading Codex-DC.",
     buttons: ["Later", "Quit and Restart Codex"],
     defaultButton: "Quit and Restart Codex",
     timeoutSeconds: 120,
@@ -93,10 +93,10 @@ export function promptRestartCodexAfterRuntimeUpdate(appRoot: string, version: s
   if (platform() !== "darwin") return;
 
   const button = showAlert({
-    title: "CodexDC needs to restart Codex",
+    title: "Codex-DC needs to restart Codex",
     message:
-      `CodexDC updated its runtime to v${version}, but the open Codex window is still running the previous CodexDC code.\n\n` +
-      "Restart Codex now to load the updated CodexDC runtime.",
+      `Codex-DC updated its runtime to v${version}, but the open Codex window is still running the previous Codex-DC code.\n\n` +
+      "Restart Codex now to load the updated Codex-DC runtime.",
     buttons: ["Later", "Quit and Restart Codex"],
     defaultButton: "Quit and Restart Codex",
     timeoutSeconds: 120,
@@ -111,10 +111,10 @@ export function promptRestartCodexToRepatch(appRoot: string): boolean {
   if (platform() !== "darwin") return true;
 
   const button = showAlert({
-    title: "CodexDC needs to restart Codex",
+    title: "Codex-DC needs to restart Codex",
     message:
-      "Codex is running without the latest CodexDC patch.\n\n" +
-      "CodexDC needs to quit Codex, re-patch the app, then reopen it.",
+      "Codex is running without the latest Codex-DC patch.\n\n" +
+      "Codex-DC needs to quit Codex, re-patch the app, then reopen it.",
     buttons: ["Later", "Restart and Re-Patch"],
     defaultButton: "Restart and Re-Patch",
     timeoutSeconds: 120,
@@ -318,10 +318,10 @@ function codexOpenReport(appRoot: string): OpenReport | null {
 }
 
 export function buildPatchFailureIssueUrl(errorMessage: string): string {
-  const title = "CodexDC failed to patch Codex after update";
+  const title = "Codex-DC failed to patch Codex after update";
   const body = [
     "## Summary",
-    "CodexDC could not reapply its patch after Codex updated.",
+    "Codex-DC could not reapply its patch after Codex updated.",
     "",
     "## Error",
     "```text",
@@ -346,7 +346,7 @@ export function buildPatchFailureIssueUrl(errorMessage: string): string {
 
 export function buildCliFailureIssueUrl(command: string | undefined, errorMessage: string): string {
   const commandLabel = command?.trim() || "(unknown command)";
-  const title = `CodexDC ${commandLabel} failed`;
+  const title = `Codex-DC ${commandLabel} failed`;
   const body = [
     "## Summary",
     `\`codexdc ${commandLabel}\` failed.`,
@@ -362,7 +362,7 @@ export function buildCliFailureIssueUrl(command: string | undefined, errorMessag
     "```",
     "",
     "## Environment",
-    `- CodexDC: ${CODEXDC_VERSION}`,
+    `- Codex-DC: ${CODEXDC_VERSION}`,
     `- Platform: ${process.platform}`,
     `- Arch: ${process.arch}`,
     `- Node: ${process.version}`,
@@ -371,7 +371,7 @@ export function buildCliFailureIssueUrl(command: string | undefined, errorMessag
     "- Codex app path, if shown: ",
     "- Install source: ",
     "- Did rerunning the command change the result? ",
-    "- Any recent Codex or CodexDC update? ",
+    "- Any recent Codex or Codex-DC update? ",
   ].join("\n");
 
   const params = new URLSearchParams({ title, body });

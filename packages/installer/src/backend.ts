@@ -18,7 +18,7 @@ export interface BackendState {
 
 export function backendState(root = userPaths().root): BackendState {
   const file = join(root, "backend.json");
-  if (!existsSync(file)) return { provider: "bundled" };
+  if (!existsSync(file)) return { provider: "fork" };
   const state = JSON.parse(readFileSync(file, "utf8")) as BackendState;
   if (!["bundled", "fork", "development"].includes(state.provider)) throw new Error("Invalid CLI backend selection");
   return state;
@@ -42,7 +42,7 @@ export function backendEnvironment(state: BackendState, inherited: NodeJS.Proces
   }
   if (state.provider === "development") {
     if (!state.development || !existsSync(state.development.executable)) {
-      throw new Error("The development CLI is missing. Rebuild it or select another CLI backend.");
+      throw new Error("The local CLI is missing. Rebuild it or select another CLI backend.");
     }
     env.CODEX_CLI_PATH = state.development.executable;
   }
@@ -57,12 +57,41 @@ export function selectBackend(provider: string, root = userPaths().root): Backen
   return backendState(root);
 }
 
+/** Prepare the saved choice, importing an explicit local override on first setup. */
+export async function prepareBackend(
+  root = userPaths().root,
+  inherited: NodeJS.ProcessEnv = process.env,
+  install = installBackend,
+  probe = probeBackend,
+): Promise<BackendState> {
+  if (!existsSync(join(root, "backend.json")) && inherited.CODEX_CLI_PATH) {
+    return configureDevelopmentBackend(inherited.CODEX_CLI_PATH, root, probe);
+  }
+  let state = backendState(root);
+  if (state.provider === "fork" && !state.installed) state = await install(root);
+  backendEnvironment(state, {});
+  return state;
+}
+
+/** Selecting the fork installs its complete package if it is not available yet. */
+export async function selectAvailableBackend(
+  provider: string,
+  root = userPaths().root,
+  install = installBackend,
+): Promise<BackendState> {
+  if (provider === "fork") {
+    const state = backendState(root);
+    if (!state.installed || !existsSync(state.installed.executable)) await install(root);
+  }
+  return selectBackend(provider, root);
+}
+
 export async function configureDevelopmentBackend(
   executable: string,
   root = userPaths().root,
   probe = probeBackend,
 ): Promise<BackendState> {
-  if (!executable.trim()) throw new Error("Specify the development CLI executable path.");
+  if (!executable.trim()) throw new Error("Specify the local CLI executable path.");
   const path = resolve(executable);
   const version = await probe(path);
   save({ ...backendState(root), provider: "development", development: { executable: path, version } }, root);

@@ -13,7 +13,6 @@ import { ipcRenderer } from "electron";
 import { installReactHook } from "./react-hook";
 import { startSettingsInjector } from "./settings-injector";
 import { startTweakHost, teardownTweakHost } from "./tweak-host";
-import { mountBackendSettings } from "./backend-settings";
 import { mountManager } from "./manager";
 import { installHeaderBranding } from "./header-branding";
 
@@ -103,7 +102,6 @@ async function boot() {
     await startTweakHost();
     fileLog("tweak host started");
     await mountManager();
-    mountBackendSettings();
     fileLog("manager mounted");
     subscribeReload();
     fileLog("boot complete");
@@ -125,7 +123,6 @@ function subscribeReload(): void {
         teardownTweakHost();
         await startTweakHost();
         await mountManager();
-    mountBackendSettings();
       } catch (e) {
         console.error("[codexdc] hot reload failed:", e);
       } finally {
@@ -209,7 +206,7 @@ async function runBrowserUiBridgeMethod(
     case "triggerSentryTestError":
       return ipcRenderer.invoke(DESKTOP_TRIGGER_SENTRY_TEST);
     default:
-      throw new Error(`Unknown CodexDC browser UI bridge method: ${method}`);
+      throw new Error(`Unknown Codex-DC browser UI bridge method: ${method}`);
   }
 }
 

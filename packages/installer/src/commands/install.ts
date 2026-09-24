@@ -1,4 +1,5 @@
 import kleur from "kleur";
+import { prepareBackend } from "../backend.js";
 import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, readFileSync, writeFileSync, mkdirSync, openSync, closeSync, unlinkSync, readdirSync, rmSync, copyFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -65,6 +66,8 @@ export async function install(opts: Opts = {}): Promise<void> {
     step.detail("Skipping Electron fuse flip; Electron Framework binary was not found");
   }
   preflightSystemTools(codex.platform, resign, codex.metaPath !== null);
+  step("Preparing selected Codex CLI");
+  await prepareBackend();
   const reopenAfterPatch = preflightAppClosed(codex, step);
 
   // Pre-flight every app-bundle target we will mutate so permission failures

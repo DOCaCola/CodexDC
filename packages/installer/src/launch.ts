@@ -1,7 +1,7 @@
 import { spawn, execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { backendEnvironment, backendState } from "./backend.js";
+import { backendEnvironment, prepareBackend } from "./backend.js";
 import { userPaths } from "./paths.js";
 import { readState } from "./state.js";
 import { resolveWindowsExecutable } from "./platform.js";
@@ -18,7 +18,7 @@ export async function launchManaged(): Promise<void> {
   const paths = userPaths();
   const state = readState(paths.stateFile);
   if (!state) throw new Error("Install CodexDC first.");
-  const env = backendEnvironment(backendState(), process.env);
+  const env = backendEnvironment(await prepareBackend(), process.env);
   const executable = process.platform === "darwin"
     ? join(state.appRoot, "Contents", "MacOS", JSON.parse(readFileSync(
       join(state.appRoot, "Contents", "Resources", "codexdc-launch.json"), "utf8")).originalExecutable)

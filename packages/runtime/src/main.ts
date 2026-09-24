@@ -7,7 +7,7 @@
  * We are in CJS land here (matches Electron's main process and Codex's own
  * code). The renderer-side runtime is bundled separately into preload.js.
  */
-import { app, BrowserView, BrowserWindow, clipboard, ipcMain, session, shell, webContents } from "electron";
+import { app, BrowserView, BrowserWindow, clipboard, dialog, ipcMain, session, shell, webContents } from "electron";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { execFile, execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash, randomInt, randomUUID } from "node:crypto";
@@ -316,7 +316,7 @@ function applyWindowsWindowIcon(win: Electron.BrowserWindow): void {
         appIconPath: WINDOWS_WINDOW_ICON_PATH,
         appIconIndex: 0,
         relaunchCommand: WINDOWS_RELAUNCH_COMMAND ?? undefined,
-        relaunchDisplayName: "CodexDC",
+        relaunchDisplayName: "Codex-DC",
       });
     }
     win.setIcon(WINDOWS_WINDOW_ICON_PATH);
@@ -667,7 +667,7 @@ app.on("will-quit", () => {
 // 3. IPC: expose tweak metadata + reveal-in-finder.
 async function runMaintenance(command: string, args: string[] = []): Promise<string> {
   const state = readInstallerState();
-  if (!state?.nodePath || !state.sourceRoot) throw new Error("CodexDC maintenance location is missing. Run Setup again.");
+  if (!state?.nodePath || !state.sourceRoot) throw new Error("Codex-DC maintenance location is missing. Run Setup again.");
   const cli = join(state.sourceRoot, "packages", "installer", "dist", "cli.js");
   return new Promise((resolve, reject) => execFile(state.nodePath!, [cli, command, ...args], {
     env: { ...process.env, CODEXDC_HOME: userRoot! }, windowsHide: true,
@@ -676,7 +676,14 @@ async function runMaintenance(command: string, args: string[] = []): Promise<str
 }
 
 ipcMain.handle("codexdc:backend", async (_event, action: string, provider?: string) => {
-  if (!["status", "check", "install", "select", "rollback"].includes(action)) throw new Error("Unknown backend action");
+  if (action === "browse") {
+    const result = await dialog.showOpenDialog({
+      title: "Choose local Codex CLI", properties: ["openFile"],
+      ...(process.platform === "win32" ? { filters: [{ name: "Executable", extensions: ["exe"] }] } : {}),
+    });
+    return result.canceled ? null : result.filePaths[0];
+  }
+  if (!["status", "check", "install", "select", "develop", "rollback"].includes(action)) throw new Error("Unknown backend action");
   if (action === "select" && !["bundled", "fork", "development"].includes(provider ?? "")) throw new Error("Unknown CLI provider");
   const result = JSON.parse(await runMaintenance("backend", [action, ...(provider ? [provider] : [])]));
   return action === "status" ? { ...result, activeExecutable: process.env.CODEX_CLI_PATH ?? null } : result;
@@ -741,7 +748,7 @@ ipcMain.handle("codexpp:check-codexpp-update", async (_e, force?: boolean) => {
 });
 
 ipcMain.handle("codexpp:run-codexpp-update", async () => {
-  throw new Error("Close CodexDC after finishing active tasks, then run Setup → Update CodexDC.");
+  throw new Error("Close Codex-DC after finishing active tasks, then run Setup → Update Codex-DC.");
 });
 
 
@@ -1091,7 +1098,7 @@ function syncMcpServersFromEnabledTweaks(): void {
     if (result.skippedServerNames.length > 0) {
       log(
         "info",
-        `skipped CodexDC managed MCP server(s) already configured by user: ${result.skippedServerNames.join(", ")}`,
+        `skipped Codex-DC managed MCP server(s) already configured by user: ${result.skippedServerNames.join(", ")}`,
       );
     }
   } catch (e) {
@@ -1306,7 +1313,7 @@ interface StoreEntryRuntimeCompatibility {
 class StoreTweakModifiedError extends Error {
   constructor(tweakName: string) {
     super(
-      `${tweakName} has local source changes, so CodexDC can't auto-update it. Revert your local changes or reinstall the tweak manually.`,
+      `${tweakName} has local source changes, so Codex-DC can't auto-update it. Revert your local changes or reinstall the tweak manually.`,
     );
     this.name = "StoreTweakModifiedError";
   }
@@ -1339,14 +1346,14 @@ function storeEntryRuntimeCompatibility(entry: TweakStoreEntry): StoreEntryRunti
     compatible,
     reason: compatible || !required
       ? null
-      : `${entry.manifest.name} requires CodexDC ${required} or newer.`,
+      : `${entry.manifest.name} requires Codex-DC ${required} or newer.`,
   };
 }
 
 function assertStoreEntryRuntimeCompatible(entry: TweakStoreEntry): void {
   const runtime = storeEntryRuntimeCompatibility(entry);
   if (!runtime.compatible) {
-    throw new Error(runtime.reason ?? `${entry.manifest.name} requires a newer CodexDC runtime.`);
+    throw new Error(runtime.reason ?? `${entry.manifest.name} requires a newer Codex-DC runtime.`);
   }
 }
 
@@ -1658,7 +1665,7 @@ function describeInstallationSource(sourceRoot: string | null): InstallationSour
     return {
       kind: "unknown",
       label: "Unknown",
-      detail: "CodexDC source location is not recorded yet.",
+      detail: "Codex-DC source location is not recorded yet.",
     };
   }
   const normalized = sourceRoot.replace(/\\/g, "/");
@@ -2187,7 +2194,7 @@ async function createCodexBrowserView(opts: CodexCreateViewOptions): Promise<unk
   const windowManager = services?.windowManager;
   if (!services || !windowManager?.registerWindow) {
     throw new Error(
-      "Codex embedded view services are not available. Reinstall CodexDC 1.0.0 or later.",
+      "Codex embedded view services are not available. Reinstall Codex-DC 1.0.0 or later.",
     );
   }
 
@@ -2214,7 +2221,7 @@ async function createCodexWindow(opts: CodexCreateWindowOptions): Promise<CodexW
   const services = getCodexWindowServices();
   if (!services) {
     throw new Error(
-      "Codex window services are not available. Reinstall CodexDC 1.0.0 or later.",
+      "Codex window services are not available. Reinstall Codex-DC 1.0.0 or later.",
     );
   }
 
