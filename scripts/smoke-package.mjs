@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { linkSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { linkSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { extractPackage } from "../packages/installer/dist/releases.js";
@@ -28,7 +28,7 @@ try {
     const result = JSON.parse(execFileSync(node, [cli, "launch"], {
       ...options,
     }));
-    assert.deepEqual(result, { version, args: ["launch"], cwd: active });
+    assert.deepEqual(result, { version, args: ["launch"], cwd: realpathSync(active) });
   }
   const candidate = JSON.parse(execFileSync(node, [cli, "backend", "status"], {
     ...options, env: { ...options.env, CODEXDC_ACTIVATING: "1" },
