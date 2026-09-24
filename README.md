@@ -3,9 +3,6 @@
 A separate, locally patched Codex desktop with optional tweaks and a selectable
 CLI backend. Independent project derived from Codex++; not an official OpenAI app.
 
-The top-left mode caption displays **Codex DC** or **ChatGPT DC** by default.
-The dropdown menu retains the original product names.
-
 ## Status
 
 Development preview. Windows builds and automated tests run in CI. macOS arm64
@@ -15,8 +12,7 @@ release. Distribution packages are unsigned; publisher signing/notarization
 credentials have not been configured.
 
 The official desktop application is not distributed here. Install it normally
-before using CodexDC. On macOS, the current desktop is named `ChatGPT.app` and
-is identified by its Codex bundle ID. Keep it installed for official updates and recovery.
+before using CodexDC.
 
 ## Installation
 
@@ -25,7 +21,7 @@ when a reviewed release is available. CI artifacts are development previews.
 Extract the complete package into a permanent folder, then run:
 
 - Windows x64: **Setup.cmd**
-- macOS Apple Silicon: **Setup.command** (experimental)
+- macOS Apple Silicon: **Setup.command**
 
 The guided setup bundles Node; no Git, npm or compiler is needed. Choose
 **Install a separate patched desktop**, then **Launch CodexDC**.
