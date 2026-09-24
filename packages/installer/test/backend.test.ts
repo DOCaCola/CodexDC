@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { backendAssetName, backendEnvironment, backendState, rollbackBackend, selectBackend } from "../src/backend";
+import { backendAssetName, backendEnvironment, backendState, rollbackBackend, selectBackend, configureDevelopmentBackend } from "../src/backend";
 import { containedArchivePath, expectedChecksum, releaseAsset, verifyChecksum } from "../src/releases";
 
 test("bundled backend removes inherited override without changing the parent environment", () => {
@@ -13,6 +13,26 @@ test("bundled backend removes inherited override without changing the parent env
   assert.equal(next.CODEX_CLI_PATH, undefined);
   assert.equal(next.PATH, parent.PATH);
   assert.equal(parent.CODEX_CLI_PATH, "unrelated-cli");
+});
+
+test("development selection uses the live build and preserves selection on failed validation", async () => {
+  const root = mkdtempSync(join(tmpdir(), "codexdc-dev-cli-"));
+  try {
+    const executable = join(root, "codex.exe");
+    writeFileSync(executable, "fixture");
+    await configureDevelopmentBackend(executable, root, async (path) => {
+      assert.equal(path, executable);
+      return "development";
+    });
+    assert.equal(backendEnvironment(backendState(root), {}).CODEX_CLI_PATH, executable);
+    const before = readFileSync(join(root, "backend.json"), "utf8");
+    await assert.rejects(configureDevelopmentBackend("broken", root, async () => { throw new Error("probe failed"); }), /probe failed/);
+    assert.equal(readFileSync(join(root, "backend.json"), "utf8"), before);
+    selectBackend("bundled", root);
+    selectBackend("development", root);
+    rmSync(executable);
+    assert.throws(() => backendEnvironment(backendState(root), {}), /development CLI is missing/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test("selection and rollback preserve complete package paths; failed selections do not change state", () => {

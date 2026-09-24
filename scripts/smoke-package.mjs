@@ -23,12 +23,19 @@ try {
     mkdirSync(join(active, "packages", "installer", "dist"), { recursive: true });
     linkSync(node, join(active, "node", process.platform === "win32" ? "node.exe" : "node"));
     writeFileSync(join(active, "packages", "installer", "dist", "cli.js"),
-      `console.log(JSON.stringify({ version: ${JSON.stringify(version)}, args: process.argv.slice(2), cwd: process.cwd() }));`);
+      `console.log(JSON.stringify({ version: ${JSON.stringify(version)}, args: process.argv.slice(2), cwd: process.cwd(), desktopArgs: process.env.CODEXDC_DESKTOP_ARGS }));`);
     writeFileSync(join(options.env.CODEXDC_HOME, "maintenance-selection.json"), JSON.stringify({ active, previous: stage }));
     const result = JSON.parse(execFileSync(node, [cli, "launch"], {
       ...options,
     }));
     assert.deepEqual(result, { version, args: ["launch"], cwd: realpathSync(active) });
+    const desktopArgs = ["C:\\Project with spaces", "--example"];
+    const shortcutResult = JSON.parse(execFileSync(node, [
+      join(stage, "packages", "installer", "dist", "desktop-launch.js"), ...desktopArgs,
+    ], options));
+    assert.deepEqual(shortcutResult, {
+      version, args: ["launch"], cwd: realpathSync(active), desktopArgs: JSON.stringify(desktopArgs),
+    });
   }
   const candidate = JSON.parse(execFileSync(node, [cli, "backend", "status"], {
     ...options, env: { ...options.env, CODEXDC_ACTIVATING: "1" },

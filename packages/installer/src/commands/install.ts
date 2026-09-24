@@ -855,7 +855,7 @@ function installWindowsManagedAppLauncher(codex: CodexInstall): { shortcutPaths:
     : "";
   writeFileSync(
     commandPath,
-    `@echo off\r\n${appUserModelIdLine}start "" "${codex.executable}" %*\r\n`,
+    `@echo off\r\n${appUserModelIdLine}"${process.execPath}" "${join(sourceRoot, "packages", "installer", "dist", "desktop-launch.js")}" %*\r\n`,
     "utf8",
   );
   const shortcutPaths = [commandPath];

@@ -82,7 +82,7 @@ const INSTALLER_STATE_FILE = join(userRoot, "state.json");
 const UPDATE_MODE_FILE = join(userRoot, "update-mode.json");
 const SELF_UPDATE_STATE_FILE = join(userRoot, "self-update-state.json");
 const SIGNED_CODEX_BACKUP = join(userRoot, "backup", "Codex.app");
-const CODEXDC_VERSION = "1.0.3";
+const CODEXDC_VERSION = "1.0.4";
 const CODEXDC_REPO = "DOCaCola/CodexDC";
 const TWEAK_STORE_INDEX_URL = process.env.CODEXDC_STORE_INDEX_URL ?? DEFAULT_TWEAK_STORE_INDEX_URL;
 const CODEX_WINDOW_SERVICES_KEY = "__codexpp_window_services__";
@@ -677,7 +677,7 @@ async function runMaintenance(command: string, args: string[] = []): Promise<str
 
 ipcMain.handle("codexdc:backend", async (_event, action: string, provider?: string) => {
   if (!["status", "check", "install", "select", "rollback"].includes(action)) throw new Error("Unknown backend action");
-  if (action === "select" && !["bundled", "fork"].includes(provider ?? "")) throw new Error("Unknown CLI provider");
+  if (action === "select" && !["bundled", "fork", "development"].includes(provider ?? "")) throw new Error("Unknown CLI provider");
   const result = JSON.parse(await runMaintenance("backend", [action, ...(provider ? [provider] : [])]));
   return action === "status" ? { ...result, activeExecutable: process.env.CODEX_CLI_PATH ?? null } : result;
 });

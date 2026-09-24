@@ -2,20 +2,25 @@ import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { userPaths } from "./paths.js";
 import { CODEXDC_VERSION } from "./version.js";
 import { downloadReleaseAsset, expectedChecksum, extractPackage, latestRelease, releaseAsset, verifyChecksum, type Release } from "./releases.js";
 
 export const CLI_REPO = "DOCaCola/codex";
 export interface BackendPackage { tag: string; releaseId: number; version: string; executable: string; digest: string }
-export interface BackendState { provider: "bundled" | "fork"; installed?: BackendPackage; previous?: BackendPackage }
+export interface BackendState {
+  provider: "bundled" | "fork" | "development";
+  installed?: BackendPackage;
+  previous?: BackendPackage;
+  development?: { executable: string; version: string };
+}
 
 export function backendState(root = userPaths().root): BackendState {
   const file = join(root, "backend.json");
   if (!existsSync(file)) return { provider: "bundled" };
   const state = JSON.parse(readFileSync(file, "utf8")) as BackendState;
-  if (!["bundled", "fork"].includes(state.provider)) throw new Error("Invalid CLI backend selection");
+  if (!["bundled", "fork", "development"].includes(state.provider)) throw new Error("Invalid CLI backend selection");
   return state;
 }
 
@@ -35,14 +40,32 @@ export function backendEnvironment(state: BackendState, inherited: NodeJS.Proces
     }
     env.CODEX_CLI_PATH = state.installed.executable;
   }
+  if (state.provider === "development") {
+    if (!state.development || !existsSync(state.development.executable)) {
+      throw new Error("The development CLI is missing. Rebuild it or select another CLI backend.");
+    }
+    env.CODEX_CLI_PATH = state.development.executable;
+  }
   return env;
 }
 
 export function selectBackend(provider: string, root = userPaths().root): BackendState {
-  if (provider !== "bundled" && provider !== "fork") throw new Error("CLI provider must be bundled or fork");
+  if (provider !== "bundled" && provider !== "fork" && provider !== "development") throw new Error("CLI provider must be bundled, fork or development");
   const state = backendState(root);
   backendEnvironment({ ...state, provider }, {});
   save({ ...state, provider }, root);
+  return backendState(root);
+}
+
+export async function configureDevelopmentBackend(
+  executable: string,
+  root = userPaths().root,
+  probe = probeBackend,
+): Promise<BackendState> {
+  if (!executable.trim()) throw new Error("Specify the development CLI executable path.");
+  const path = resolve(executable);
+  const version = await probe(path);
+  save({ ...backendState(root), provider: "development", development: { executable: path, version } }, root);
   return backendState(root);
 }
 

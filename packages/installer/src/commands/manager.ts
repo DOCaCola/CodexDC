@@ -7,7 +7,7 @@ import { uninstall } from "./uninstall.js";
 import { safeMode } from "./safe-mode.js";
 import { installManagedMac, uninstallManagedMac } from "../managed-mac.js";
 import { launchManaged } from "../launch.js";
-import { backendState, checkBackend, installBackend, selectBackend, rollbackBackend } from "../backend.js";
+import { backendState, checkBackend, installBackend, selectBackend, rollbackBackend, configureDevelopmentBackend } from "../backend.js";
 import { userPaths } from "../paths.js";
 import { updateCodex } from "./update-codex.js";
 
@@ -64,12 +64,19 @@ export async function manager(): Promise<void> {
               { title: "Desktop bundled", value: "bundled" },
               { title: "Install latest DC fork and select it", value: "install" },
               { title: "Use installed DC fork", value: "fork" },
+              { title: "Use a local development CLI", value: "development" },
               { title: "Check latest release", value: "check" },
               { title: "Previous installed DC fork", value: "rollback" },
               { title: "Back", value: "back" },
             ] });
           if (choice === "install") { await installBackend(); selectBackend("fork"); }
           else if (choice === "fork" || choice === "bundled") selectBackend(choice);
+          else if (choice === "development") {
+            const { executable } = await prompts({ type: "text", name: "executable",
+              message: "Development CLI executable path",
+              initial: backendState().development?.executable ?? process.env.CODEX_CLI_PATH ?? "" });
+            if (executable) await configureDevelopmentBackend(executable);
+          }
           else if (choice === "check") console.log(await checkBackend());
           else if (choice === "rollback") rollbackBackend();
           console.log("Saved selection applies when you quit and reopen CodexDC. Finish active tasks first.");

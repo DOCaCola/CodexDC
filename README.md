@@ -100,6 +100,14 @@ npm test
 npm run package
 ```
 
+For a development install, run `node bin/codexdc.js install` from this checkout.
+Link each local tweak with `node bin/codexdc.js dev <tweak-directory> --no-watch`.
+Select a locally built CLI with `node bin/codexdc.js backend develop <executable>`,
+or use Setup → Choose Codex CLI backend → Use a local development CLI.
+The executable remains at its build location. Rebuild the patcher with `npm run build`,
+close CodexDC, and run `node bin/codexdc.js repair --force` to refresh the managed app.
+Source checkouts use Git updates; automatic release updates are disabled.
+
 macOS native builds require Xcode command-line tools and Node headers. CI uses
 the pinned Node distribution from `scripts/package.mjs --node-only`.
 

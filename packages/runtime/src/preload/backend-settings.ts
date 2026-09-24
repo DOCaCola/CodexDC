@@ -5,7 +5,7 @@ export function mountBackendSettings(): void {
   registerSection({
     id: "codexdc:backend",
     title: "Codex CLI",
-    description: "Choose the desktop-bundled backend or the DC fork.",
+    description: "Choose the desktop-bundled backend, the DC fork, or a local development build configured in Setup.",
     render(root) {
       root.style.cssText = "display:flex;flex-direction:column;gap:12px";
       const status = document.createElement("p");
@@ -17,9 +17,10 @@ export function mountBackendSettings(): void {
       output.setAttribute("role", "status");
       const refresh = async () => {
         const state = await ipcRenderer.invoke("codexdc:backend", "status");
-        status.textContent = `Selected: ${state.provider === "fork" ? "DC fork" : "Desktop bundled"}. ` +
+        status.textContent = `Selected: ${state.provider === "development" ? "Local development CLI" : state.provider === "fork" ? "DC fork" : "Desktop bundled"}. ` +
           `Installed DC fork: ${state.installed?.version ?? "none"}. ` +
-          `Running: ${state.activeExecutable ? "DC fork — " + state.activeExecutable : "desktop bundled"}.`;
+          `Development CLI: ${state.development?.executable ?? "not configured"}. ` +
+          `Running: ${state.activeExecutable ?? "desktop bundled"}.`;
       };
       const add = (label: string, action: string, provider?: string) => {
         const button = document.createElement("button");
@@ -42,6 +43,7 @@ export function mountBackendSettings(): void {
       };
       add("Use desktop bundled", "select", "bundled");
       add("Use DC fork", "select", "fork");
+      add("Use configured development CLI", "select", "development");
       add("Check latest release", "check");
       add("Install / update DC fork", "install");
       add("Previous DC fork version", "rollback");
