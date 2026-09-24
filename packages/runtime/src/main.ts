@@ -9,7 +9,7 @@
  */
 import { app, BrowserView, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, session, shell, webContents } from "electron";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { execFile, execFileSync, spawn, spawnSync } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { homedir, tmpdir } from "node:os";
@@ -80,9 +80,7 @@ const CONFIG_FILE = join(userRoot, "config.json");
 const CODEX_CONFIG_FILE = join(homedir(), ".codex", "config.toml");
 const CODEX_GLOBAL_STATE_FILE = join(homedir(), ".codex", ".codex-global-state.json");
 const INSTALLER_STATE_FILE = join(userRoot, "state.json");
-const UPDATE_MODE_FILE = join(userRoot, "update-mode.json");
 const SELF_UPDATE_STATE_FILE = join(userRoot, "self-update-state.json");
-const SIGNED_CODEX_BACKUP = join(userRoot, "backup", "Codex.app");
 const CODEXDC_VERSION = "1.0.4";
 const CODEXDC_REPO = "DOCaCola/CodexDC";
 const TWEAK_STORE_INDEX_URL = process.env.CODEXDC_STORE_INDEX_URL ?? DEFAULT_TWEAK_STORE_INDEX_URL;
@@ -391,82 +389,14 @@ function wrapSparkleExports(loaded: unknown): void {
   for (const name of ["installUpdatesIfAvailable"]) {
     const fn = exports[name];
     if (typeof fn !== "function") continue;
-    exports[name] = function codexPlusPlusSparkleWrapper(this: unknown, ...args: unknown[]) {
-      if (readInstallerState()?.managedCopy) {
-        void runMaintenance("update-codex");
-        return;
-      }
-      prepareSignedCodexForSparkleInstall();
-      return Reflect.apply(fn, this, args);
+    exports[name] = function codexPlusPlusSparkleWrapper() {
+      void runMaintenance("update-codex");
     };
   }
 
   if (exports.default && exports.default !== exports) {
     wrapSparkleExports(exports.default);
   }
-}
-
-function prepareSignedCodexForSparkleInstall(): void {
-  if (process.platform !== "darwin") return;
-  if (existsSync(UPDATE_MODE_FILE)) {
-    log("info", "Sparkle update prep skipped; update mode already active");
-    return;
-  }
-  if (!existsSync(SIGNED_CODEX_BACKUP)) {
-    log("warn", "Sparkle update prep skipped; signed Codex.app backup is missing");
-    return;
-  }
-  if (!isDeveloperIdSignedApp(SIGNED_CODEX_BACKUP)) {
-    log("warn", "Sparkle update prep skipped; Codex.app backup is not Developer ID signed");
-    return;
-  }
-
-  const state = readInstallerState();
-  if (state?.managedCopy) return;
-  const appRoot = state?.appRoot ?? inferMacAppRoot();
-  if (!appRoot) {
-    log("warn", "Sparkle update prep skipped; could not infer Codex.app path");
-    return;
-  }
-
-  const mode = {
-    enabledAt: new Date().toISOString(),
-    appRoot,
-    codexVersion: state?.codexVersion ?? null,
-  };
-  writeFileSync(UPDATE_MODE_FILE, JSON.stringify(mode, null, 2));
-
-  try {
-    execFileSync("ditto", [SIGNED_CODEX_BACKUP, appRoot], { stdio: "ignore" });
-    try {
-      execFileSync("xattr", ["-dr", "com.apple.quarantine", appRoot], { stdio: "ignore" });
-    } catch {}
-    log("info", "Restored signed Codex.app before Sparkle install", { appRoot });
-  } catch (e) {
-    log("error", "Failed to restore signed Codex.app before Sparkle install", {
-      message: (e as Error).message,
-    });
-  }
-}
-
-function isDeveloperIdSignedApp(appRoot: string): boolean {
-  const result = spawnSync("codesign", ["-dv", "--verbose=4", appRoot], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
-  return (
-    result.status === 0 &&
-    /Authority=Developer ID Application:/.test(output) &&
-    !/Signature=adhoc/.test(output) &&
-    !/TeamIdentifier=not set/.test(output)
-  );
-}
-
-function inferMacAppRoot(): string | null {
-  const marker = ".app/Contents/MacOS/";
-  const idx = process.execPath.indexOf(marker);
-  return idx >= 0 ? process.execPath.slice(0, idx + ".app".length) : null;
 }
 
 // Surface unhandled errors from anywhere in the main process to our log.
