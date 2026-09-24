@@ -1,0 +1,28 @@
+node_modules
+dist
+build
+*.log
+.DS_Store
+.vscode
+.idea
+*.tsbuildinfo
+coverage
+.playwright-cli/
+.env
+.env.*
+!.env.example
+
+# installer artifacts (local testing)
+/tmp-extract
+/tmp-codex
+
+# Generated distribution and private investigation files
+packages/installer/assets/runtime/
+packages/installer/assets/loader.cjs
+packages/installer/assets/mac-launcher
+work/
+LOCAL-NOTES.md
+*.asar
+*.node
+
+.cache/

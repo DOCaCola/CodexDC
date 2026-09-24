@@ -1,0 +1,52 @@
+{
+  "name": "codexdc",
+  "version": "1.0.0",
+  "description": "Installer CLI for codexdc tweak system",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DOCaCola/CodexDC.git",
+    "directory": "packages/installer"
+  },
+  "bugs": {
+    "url": "https://github.com/DOCaCola/CodexDC/issues"
+  },
+  "homepage": "https://github.com/DOCaCola/CodexDC#readme",
+  "bin": {
+    "codexdc": "dist/cli.js"
+  },
+  "main": "dist/cli.js",
+  "files": [
+    "dist",
+    "assets",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/build-launcher.mjs && npm run copy-assets",
+    "copy-assets": "node ./scripts/copy-assets.mjs",
+    "dev": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@codexdc/sdk": "*",
+    "@electron/asar": "^3.4.0",
+    "kleur": "^4.1.5",
+    "plist": "^3.1.0",
+    "prompts": "^2.4.2",
+    "sade": "^1.8.1",
+    "tar": "^7.5.21",
+    "yauzl": "^3.4.0"
+  },
+  "devDependencies": {
+    "@types/plist": "^3.0.5",
+    "@types/prompts": "^2.4.9",
+    "@types/tar": "^6.1.13",
+    "@types/yauzl": "^3.4.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "name": "codexdc-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "Tweak system for the OpenAI Codex desktop app",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DOCaCola/CodexDC.git"
+  },
+  "bugs": {
+    "url": "https://github.com/DOCaCola/CodexDC/issues"
+  },
+  "homepage": "https://github.com/DOCaCola/CodexDC#readme",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @codexdc/sdk && npm run build --workspace @codexdc/native-host && npm run build --workspace @codexdc/runtime && npm run build --workspace @codexdc/loader && npm run build --workspace codexdc",
+    "clean": "node scripts/clean.mjs",
+    "test": "npm run build && node --import tsx --test packages/*/test/*.test.ts",
+    "audit": "npm audit --workspaces --include-workspace-root",
+    "package": "node scripts/package.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "codexdc": "bin/codexdc.js"
+  },
+  "dependencies": {
+    "@electron/asar": "^3.4.0",
+    "kleur": "^4.1.5",
+    "plist": "^3.1.0",
+    "prompts": "^2.4.2",
+    "sade": "^1.8.1",
+    "tar": "^7.5.21"
+  },
+  "overrides": {
+    "@xmldom/xmldom": "^0.9.12",
+    "brace-expansion": "^2.0.3",
+    "esbuild": "^0.28.2"
+  }
+}

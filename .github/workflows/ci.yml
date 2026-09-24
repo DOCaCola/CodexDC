@@ -1,0 +1,64 @@
+name: Build and package CodexDC
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            target: win32-x64
+          - runner: macos-15
+            target: darwin-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.13.0
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Prepare pinned native headers
+        if: runner.os == 'macOS'
+        run: |
+          node scripts/package.mjs --node-only
+          echo "npm_config_nodedir=$GITHUB_WORKSPACE/.cache/node/node-v24.13.0-darwin-arm64" >> "$GITHUB_ENV"
+      - run: npm test
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CodexDC-${{ matrix.target }}
+          path: |
+            dist/CodexDC-*
+            dist/SHA256SUMS
+          retention-days: 14
+  draft-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Prepare checksums
+        run: |
+          mkdir release
+          find artifacts -type f -name 'CodexDC-*' -exec cp {} release/ \;
+          cat artifacts/*/SHA256SUMS > release/SHA256SUMS
+      - name: Create draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" release/* --verify-tag --draft --title "CodexDC $RELEASE_TAG" --notes "Development preview. macOS native acceptance and publisher signing remain release gates. Contains only the patcher and maintenance runtime; official Codex must already be installed."
