@@ -1,25 +1,8 @@
 /**
- * Settings injector for Codex's Settings page.
- *
- * Codex's settings is a routed page (URL stays at `/index.html?hostId=local`)
- * NOT a modal dialog. The sidebar lives inside a `<div class="flex flex-col
- * gap-1 gap-0">` wrapper that holds one or more `<div class="flex flex-col
- * gap-px">` groups of buttons. There are no stable `role` / `aria-label` /
- * `data-testid` hooks on the shell so we identify the sidebar by text-content
- * match against known item labels (General, Appearance, Configuration, …).
- *
- * Layout we inject:
- *
- *   GENERAL                       (uppercase group label)
- *   [Codex's existing items group]
- *   CODEX++                       (uppercase group label)
- *   ⓘ Config
- *   ☰ Tweaks
- *   ◇ Tweak Store
- *
- * Clicking Config / Tweaks / Tweak Store hides Codex's content panel children and renders
- * our own `main-surface` panel in their place. Clicking any of Codex's
- * sidebar items restores the original view.
+ * Adds Codex-DC pages to the native Settings navigation's scrolling list.
+ * Controls reuse the desktop's theme and utility classes. Selecting one of
+ * our pages temporarily hides the routed native content; native navigation
+ * restores it.
  */
 
 import { ipcRenderer } from "electron";
@@ -157,10 +140,6 @@ interface InjectorState {
   sections: Map<string, SettingsSection>;
   pages: Map<string, RegisteredPage>;
   listedTweaks: ListedTweak[];
-  /** Outer wrapper that holds Codex's items group + our injected groups. */
-  outerWrapper: HTMLElement | null;
-  /** Our "General" label for Codex's native settings group. */
-  nativeNavHeader: HTMLElement | null;
   /** Our "CodexDC" nav group (Config/Tweaks). */
   navGroup: HTMLElement | null;
   navButtons: { config: HTMLButtonElement; tweaks: HTMLButtonElement; store: HTMLButtonElement } | null;
@@ -188,8 +167,6 @@ const state: InjectorState = {
   sections: new Map(),
   pages: new Map(),
   listedTweaks: [],
-  outerWrapper: null,
-  nativeNavHeader: null,
   navGroup: null,
   navButtons: null,
   codexPlusPlusUpdateButton: null,
@@ -376,20 +353,10 @@ function tryInject(): void {
     state.settingsSurfaceHideTimer = null;
   }
   setSettingsSurfaceVisible(true, "sidebar-found");
-  // Codex's items group lives inside an outer wrapper that's already styled
-  // to hold multiple groups (`flex flex-col gap-1 gap-0`). We inject our
-  // group as a sibling so the natural gap-1 acts as our visual separator.
-  const outer = itemsGroup.parentElement ?? itemsGroup;
-  if (!isSettingsSidebarCandidate(itemsGroup) || !isSettingsSidebarCandidate(outer)) {
-    scheduleSettingsSurfaceHidden();
-    plog("rejected non-settings sidebar candidate", {
-      itemsGroup: describe(itemsGroup),
-      outer: describe(outer),
-    });
-    return;
-  }
+  // The matched element is the scrolling list itself, not its flex-1 parent.
+  // Appending to the parent pins our group below the native settings list.
+  const outer = itemsGroup;
   state.sidebarRoot = outer;
-  syncNativeSettingsHeader(itemsGroup, outer);
 
   if (state.navGroup && outer.contains(state.navGroup)) {
     syncPagesGroup();
@@ -439,7 +406,7 @@ function tryInject(): void {
 
   const updateButton = sidebarUpdatePillButton();
   state.codexPlusPlusUpdateButton = updateButton;
-  group.appendChild(sidebarGroupHeader("CodexDC", "pt-3", updateButton));
+  group.appendChild(sidebarGroupHeader("Codex-DC", updateButton));
   refreshSidebarCodexPlusPlusUpdateButton();
 
   // ── Sidebar items ────────────────────────────────────────────────────
@@ -475,22 +442,11 @@ function tryInject(): void {
   syncPagesGroup();
 }
 
-function syncNativeSettingsHeader(itemsGroup: HTMLElement, outer: HTMLElement): void {
-  if (state.nativeNavHeader && outer.contains(state.nativeNavHeader)) return;
-  if (outer === itemsGroup) return;
-
-  const header = sidebarGroupHeader("General");
-  header.dataset.codexpp = "native-nav-header";
-  outer.insertBefore(header, itemsGroup);
-  state.nativeNavHeader = header;
-}
-
-function sidebarGroupHeader(text: string, topPadding = "pt-2", trailing?: HTMLElement): HTMLElement {
+function sidebarGroupHeader(text: string, trailing?: HTMLElement): HTMLElement {
   const header = document.createElement("div");
-  header.className =
-    `px-row-x ${topPadding} pb-1 flex items-center justify-between gap-2 text-[11px] font-medium uppercase tracking-wider text-token-description-foreground select-none`;
+  header.className = "group/nav-section-title flex items-center justify-between gap-2 pe-0.5 ps-2";
   const label = document.createElement("span");
-  label.className = "truncate";
+  label.className = "min-w-0 flex-1 text-base font-medium text-tertiary opacity-75";
   label.textContent = text;
   header.appendChild(label);
   if (trailing) header.appendChild(trailing);
@@ -757,7 +713,7 @@ function syncPagesGroup(): void {
     group = document.createElement("div");
     group.dataset.codexpp = "pages-group";
     group.className = "flex flex-col gap-px";
-    group.appendChild(sidebarGroupHeader("Tweaks", "pt-3"));
+    group.appendChild(sidebarGroupHeader("Tweaks"));
     outer.appendChild(group);
     state.pagesGroup = group;
   } else {
@@ -787,18 +743,18 @@ function syncPagesGroup(): void {
 }
 
 function makeSidebarItem(label: string, iconSvg: string): HTMLButtonElement {
-  // Class string copied verbatim from Codex's sidebar buttons (General etc).
+  // Reuse native sidebar sizing, focus, hover, and theme utilities.
   const btn = document.createElement("button");
   btn.type = "button";
   btn.dataset.codexpp = `nav-${label.toLowerCase()}`;
   btn.setAttribute("aria-label", label);
   btn.className =
-    "focus-visible:outline-token-border relative px-row-x py-row-y cursor-interaction shrink-0 items-center overflow-hidden rounded-lg text-left text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 gap-2 flex w-full hover:bg-token-list-hover-background font-normal";
+    "sidebar-item relative h-[var(--nav-item-height,var(--height-token-row))] px-[var(--padding-row-cell-x,var(--padding-row-x))] py-row-y cursor-interaction shrink-0 items-center overflow-hidden text-start text-sm focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px] disabled:cursor-not-allowed disabled:opacity-50 gap-2 flex w-full hover:bg-primary-ghost-hover font-normal";
 
   const inner = document.createElement("div");
   inner.className =
-    "flex min-w-0 items-center text-base gap-2 flex-1 text-token-foreground";
-  inner.innerHTML = `${iconSvg}<span class="truncate">${label}</span>`;
+    "flex min-w-0 items-center text-base gap-2 flex-1 text-default";
+  inner.innerHTML = `<span class="flex icon-leading-slot min-w-[var(--icon-leading-size)] shrink-0 items-center justify-center">${iconSvg}</span><span class="text-fade-truncate">${label}</span>`;
   btn.appendChild(inner);
   return btn;
 }
@@ -871,9 +827,9 @@ function syncCodexNativeNavActive(mute: boolean): void {
     if (btn.getAttribute("aria-current") === "page") {
       btn.removeAttribute("aria-current");
     }
-    if (btn.classList.contains("bg-token-list-hover-background")) {
-      btn.classList.remove("bg-token-list-hover-background");
-      btn.classList.add("hover:bg-token-list-hover-background");
+    if (btn.classList.contains("bg-primary-ghost-hover")) {
+      btn.classList.remove("bg-primary-ghost-hover");
+      btn.classList.add("hover:bg-primary-ghost-hover");
     }
   }
 }
@@ -881,26 +837,26 @@ function syncCodexNativeNavActive(mute: boolean): void {
 function applyNavActive(btn: HTMLButtonElement, active: boolean): void {
   const inner = btn.firstElementChild as HTMLElement | null;
   if (active) {
-      btn.classList.remove("hover:bg-token-list-hover-background", "font-normal");
-      btn.classList.add("bg-token-list-hover-background");
+      btn.classList.remove("hover:bg-primary-ghost-hover", "font-normal");
+      btn.classList.add("bg-primary-ghost-hover");
       btn.setAttribute("aria-current", "page");
       if (inner) {
-        inner.classList.remove("text-token-foreground");
-        inner.classList.add("text-token-list-active-selection-foreground");
+        inner.classList.remove("text-default");
+        inner.classList.add("text-emphasis");
         inner
           .querySelector("svg")
-          ?.classList.add("text-token-list-active-selection-icon-foreground");
+          ?.classList.add("text-codex-icon-active");
       }
     } else {
-      btn.classList.add("hover:bg-token-list-hover-background", "font-normal");
-      btn.classList.remove("bg-token-list-hover-background");
+      btn.classList.add("hover:bg-primary-ghost-hover", "font-normal");
+      btn.classList.remove("bg-primary-ghost-hover");
       btn.removeAttribute("aria-current");
       if (inner) {
-        inner.classList.add("text-token-foreground");
-        inner.classList.remove("text-token-list-active-selection-foreground");
+        inner.classList.add("text-default");
+        inner.classList.remove("text-emphasis");
         inner
           .querySelector("svg")
-          ?.classList.remove("text-token-list-active-selection-icon-foreground");
+          ?.classList.remove("text-codex-icon-active");
       }
     }
 }
@@ -1001,7 +957,7 @@ function rerender(): void {
       if (typeof ret === "function") entry.teardown = ret;
     } catch (e) {
       const err = document.createElement("div");
-      err.className = "text-token-charts-red text-sm";
+      err.className = "text-chart-red text-sm";
       err.textContent = `Error rendering page: ${(e as Error).message}`;
       root.sectionsWrap.appendChild(err);
     }
@@ -1081,10 +1037,10 @@ function autoUpdateRow(config: CodexPlusPlusConfig): HTMLElement {
   const left = document.createElement("div");
   left.className = "flex min-w-0 flex-col gap-1";
   const title = document.createElement("div");
-  title.className = "min-w-0 text-sm text-token-text-primary";
+  title.className = "min-w-0 text-sm text-default";
   title.textContent = "Update CodexDC on launch";
   const desc = document.createElement("div");
-  desc.className = "text-token-text-secondary min-w-0 text-sm";
+  desc.className = "text-secondary min-w-0 text-sm";
   desc.textContent = `Installed version v${config.version}. Checks for stable patcher updates when CodexDC launches. No scheduled background tasks.`;
   left.appendChild(title);
   left.appendChild(desc);
@@ -1102,7 +1058,7 @@ function updateChannelRow(config: CodexPlusPlusConfig): HTMLElement {
   const action = row.querySelector<HTMLElement>("[data-codexpp-row-actions]");
   const select = document.createElement("select");
   select.className =
-    "h-8 rounded-lg border border-token-border bg-transparent px-2 text-sm text-token-text-primary focus:outline-none";
+    "h-8 rounded-lg border border-default bg-transparent px-2 text-sm text-default focus:outline-none";
   for (const [value, label] of [
     ["stable", "Stable"],
     ["prerelease", "Prerelease"],
@@ -1160,10 +1116,10 @@ function checkForUpdatesRow(config: CodexPlusPlusConfig): HTMLElement {
   const left = document.createElement("div");
   left.className = "flex min-w-0 flex-col gap-1";
   const title = document.createElement("div");
-  title.className = "min-w-0 text-sm text-token-text-primary";
+  title.className = "min-w-0 text-sm text-default";
   title.textContent = check?.updateAvailable ? "CodexDC update available" : "Check for CodexDC updates";
   const desc = document.createElement("div");
-  desc.className = "text-token-text-secondary min-w-0 text-sm";
+  desc.className = "text-secondary min-w-0 text-sm";
   desc.textContent = updateSummary(check);
   left.appendChild(title);
   left.appendChild(desc);
@@ -1222,12 +1178,12 @@ function releaseNotesRow(check: CodexPlusPlusUpdateCheck): HTMLElement {
   const row = document.createElement("div");
   row.className = "flex flex-col gap-2 p-3";
   const title = document.createElement("div");
-  title.className = "text-sm text-token-text-primary";
+  title.className = "text-sm text-default";
   title.textContent = "Latest release notes";
   row.appendChild(title);
   const body = document.createElement("div");
   body.className =
-    "max-h-60 overflow-auto rounded-md border border-token-border bg-token-foreground/5 p-3 text-sm text-token-text-secondary";
+    "max-h-60 overflow-auto rounded-md border border-default bg-text/5 p-3 text-sm text-secondary";
   body.appendChild(renderReleaseNotesMarkdown(check.releaseNotes?.trim() || check.error || "No release notes available."));
   row.appendChild(body);
   return row;
@@ -1258,7 +1214,7 @@ function renderReleaseNotesMarkdown(markdown: string): HTMLElement {
     if (!codeLines) return;
     const pre = document.createElement("pre");
     pre.className =
-      "m-0 overflow-auto rounded-md border border-token-border bg-token-foreground/10 p-2 text-xs text-token-text-primary";
+      "m-0 overflow-auto rounded-md border border-default bg-text/10 p-2 text-xs text-default";
     const code = document.createElement("code");
     code.textContent = codeLines.join("\n");
     pre.appendChild(code);
@@ -1293,7 +1249,7 @@ function renderReleaseNotesMarkdown(markdown: string): HTMLElement {
       flushParagraph();
       flushList();
       const h = document.createElement(heading[1].length === 1 ? "h3" : "h4");
-      h.className = "m-0 text-sm font-medium text-token-text-primary";
+      h.className = "m-0 text-sm font-medium text-default";
       appendInlineMarkdown(h, heading[2]);
       root.appendChild(h);
       continue;
@@ -1308,8 +1264,8 @@ function renderReleaseNotesMarkdown(markdown: string): HTMLElement {
         flushList();
         list = document.createElement(wantOrdered ? "ol" : "ul");
         list.className = wantOrdered
-          ? "m-0 list-decimal space-y-1 pl-5 leading-5"
-          : "m-0 list-disc space-y-1 pl-5 leading-5";
+          ? "m-0 list-decimal space-y-1 pl-4 leading-5"
+          : "m-0 list-disc space-y-1 pl-4 leading-5";
       }
       const li = document.createElement("li");
       appendInlineMarkdown(li, (unordered ?? ordered)?.[1] ?? "");
@@ -1322,7 +1278,7 @@ function renderReleaseNotesMarkdown(markdown: string): HTMLElement {
       flushParagraph();
       flushList();
       const blockquote = document.createElement("blockquote");
-      blockquote.className = "m-0 border-l-2 border-token-border pl-3 leading-5";
+      blockquote.className = "m-0 border-l-2 border-default pl-3 leading-5";
       appendInlineMarkdown(blockquote, quote[1]);
       root.appendChild(blockquote);
       continue;
@@ -1346,12 +1302,12 @@ function appendInlineMarkdown(parent: HTMLElement, text: string): void {
     if (match[2] !== undefined) {
       const code = document.createElement("code");
       code.className =
-        "rounded border border-token-border bg-token-foreground/10 px-1 py-0.5 text-xs text-token-text-primary";
+        "rounded border border-default bg-text/10 px-1 py-0.5 text-xs text-default";
       code.textContent = match[2];
       parent.appendChild(code);
     } else if (match[3] !== undefined && match[4] !== undefined) {
       const a = document.createElement("a");
-      a.className = "text-token-text-primary underline underline-offset-2";
+      a.className = "text-default underline underline-offset-2";
       a.href = match[4];
       a.target = "_blank";
       a.rel = "noopener noreferrer";
@@ -1359,7 +1315,7 @@ function appendInlineMarkdown(parent: HTMLElement, text: string): void {
       parent.appendChild(a);
     } else if (match[5] !== undefined) {
       const strong = document.createElement("strong");
-      strong.className = "font-medium text-token-text-primary";
+      strong.className = "font-medium text-default";
       strong.textContent = match[5];
       parent.appendChild(strong);
     } else if (match[6] !== undefined) {
@@ -1380,10 +1336,10 @@ function statusBadge(status: "ok" | "warn" | "error", label?: string): HTMLEleme
   const badge = document.createElement("span");
   const tone =
     status === "ok"
-      ? "border-token-charts-green text-token-charts-green"
+      ? "border-chart-green/30 text-chart-green"
       : status === "warn"
-        ? "border-token-charts-yellow text-token-charts-yellow"
-        : "border-token-charts-red text-token-charts-red";
+        ? "border-warning-outline text-chart-yellow"
+        : "border-chart-red/30 text-chart-red";
   badge.className = `inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-xs font-medium ${tone}`;
   badge.textContent = label || (status === "ok" ? "OK" : status === "warn" ? "Review" : "Error");
   return badge;
@@ -1494,10 +1450,10 @@ function actionRow(titleText: string, description: string): HTMLElement {
   const left = document.createElement("div");
   left.className = "flex min-w-0 flex-col gap-1";
   const title = document.createElement("div");
-  title.className = "min-w-0 text-sm text-token-text-primary";
+  title.className = "min-w-0 text-sm text-default";
   title.textContent = titleText;
   const desc = document.createElement("div");
-  desc.className = "text-token-text-secondary min-w-0 text-sm";
+  desc.className = "text-secondary min-w-0 text-sm";
   desc.textContent = description;
   left.appendChild(title);
   left.appendChild(desc);
@@ -1638,7 +1594,7 @@ function tweakStoreCard(entry: TweakStoreEntryView): HTMLElement {
 
   const titleRow = tweakStoreTitleRow();
   const title = document.createElement("div");
-  title.className = "min-w-0 text-lg font-semibold leading-7 text-token-foreground";
+  title.className = "min-w-0 text-lg font-semibold leading-7 text-default";
   title.textContent = entry.manifest.name;
   titleRow.appendChild(title);
   titleRow.appendChild(verifiedSafeBadge());
@@ -1717,7 +1673,7 @@ function showStoreCardMessage(card: HTMLElement, message: string): void {
   const notice = document.createElement("div");
   notice.dataset.codexppStoreCardMessage = "true";
   notice.className =
-    "rounded-lg border border-token-border/50 bg-token-foreground/5 px-3 py-2 text-sm leading-5 text-token-description-foreground";
+    "rounded-lg border border-subtle bg-text/5 px-3 py-2 text-sm leading-5 text-codex-description";
   notice.textContent = message;
   const actions = card.lastElementChild;
   if (actions) card.insertBefore(notice, actions);
@@ -1733,7 +1689,7 @@ function tweakStoreCardShell(): {
 } {
   const card = document.createElement("div");
   card.className =
-    "border-token-border/40 flex min-h-[190px] flex-col justify-between gap-4 rounded-2xl border p-4 transition-colors hover:bg-token-foreground/5";
+    "border-subtle flex min-h-[190px] flex-col justify-between gap-4 rounded-2xl border p-4 transition-colors hover:bg-text/5";
 
   const left = document.createElement("div");
   left.className = "flex min-w-0 flex-1 items-start gap-3";
@@ -1763,7 +1719,7 @@ function tweakStoreTitleRow(): HTMLElement {
 
 function tweakStoreDescription(): HTMLElement {
   const desc = document.createElement("div");
-  desc.className = "line-clamp-3 min-w-0 text-sm leading-5 text-token-text-secondary";
+  desc.className = "line-clamp-3 min-w-0 text-sm leading-5 text-secondary";
   return desc;
 }
 
@@ -1771,7 +1727,7 @@ function tweakStoreReadMoreButton(repo: string): HTMLButtonElement {
   const readMore = document.createElement("button");
   readMore.type = "button";
   readMore.className =
-    "inline-flex w-fit items-center gap-1 text-sm font-medium text-token-text-link-foreground hover:underline";
+    "inline-flex w-fit items-center gap-1 text-sm font-medium text-info hover:underline";
   readMore.innerHTML =
     `Read More` +
     `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">` +
@@ -1800,7 +1756,7 @@ function tweakStoreGhostCard(): HTMLElement {
 
   const titleRow = tweakStoreTitleRow();
   const title = document.createElement("div");
-  title.className = "min-w-0 text-lg font-semibold leading-7 text-token-foreground";
+  title.className = "min-w-0 text-lg font-semibold leading-7 text-default";
   title.appendChild(ghostBlock("my-1 h-5 w-44 rounded-md"));
   titleRow.appendChild(title);
   titleRow.appendChild(verifiedSafeGhostBadge());
@@ -1824,7 +1780,7 @@ function tweakStoreGhostCard(): HTMLElement {
 function storeAvatarGhost(): HTMLElement {
   const avatar = document.createElement("div");
   avatar.className =
-    "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-token-border-default bg-transparent text-token-description-foreground";
+    "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-default bg-transparent text-codex-description";
   avatar.appendChild(ghostBlock("h-full w-full"));
   return avatar;
 }
@@ -1850,7 +1806,7 @@ function storeVersionGhostBadge(): HTMLElement {
 
 function ghostBlock(className: string): HTMLElement {
   const block = document.createElement("div");
-  block.className = `animate-pulse bg-token-foreground/10 ${className}`;
+  block.className = `animate-pulse bg-text/10 ${className}`;
   block.setAttribute("aria-hidden", "true");
   return block;
 }
@@ -1858,7 +1814,7 @@ function ghostBlock(className: string): HTMLElement {
 function storeAvatar(entry: TweakStoreEntryView): HTMLElement {
   const avatar = document.createElement("div");
   avatar.className =
-    "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-token-border-default bg-transparent text-token-description-foreground";
+    "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-default bg-transparent text-codex-description";
   const initial = (entry.manifest.name?.[0] ?? "?").toUpperCase();
   const fallback = document.createElement("span");
   fallback.textContent = initial;
@@ -1896,7 +1852,7 @@ function sidebarUpdatePillButton(): HTMLButtonElement {
   btn.type = "button";
   btn.dataset.codexppSidebarUpdate = "true";
   btn.className =
-    "user-select-none no-drag cursor-interaction inline-flex shrink-0 items-center justify-center whitespace-nowrap";
+    "select-none no-drag cursor-interaction inline-flex shrink-0 items-center justify-center whitespace-nowrap";
   Object.assign(btn.style, {
     display: "none",
     height: "20px",
@@ -2004,8 +1960,8 @@ function storeToolbarButton(
   btn.type = "button";
   btn.className =
     variant === "primary"
-      ? "border-token-border user-select-none no-drag cursor-interaction flex h-8 items-center gap-1 whitespace-nowrap rounded-lg border border-token-border bg-token-bg-fog px-2 py-0 text-sm text-token-button-tertiary-foreground enabled:hover:bg-token-list-hover-background disabled:cursor-not-allowed disabled:opacity-40"
-      : "border-token-border user-select-none no-drag cursor-interaction flex h-8 items-center gap-1 whitespace-nowrap rounded-lg border border-transparent bg-token-foreground/5 px-2 py-0 text-sm text-token-foreground enabled:hover:bg-token-foreground/10 disabled:cursor-not-allowed disabled:opacity-40";
+      ? "border-default select-none no-drag cursor-interaction flex h-8 items-center gap-1 whitespace-nowrap rounded-lg border border-default bg-surface-card px-2 py-0 text-sm text-default enabled:hover:bg-primary-ghost-hover disabled:cursor-not-allowed disabled:opacity-40"
+      : "border-default select-none no-drag cursor-interaction flex h-8 items-center gap-1 whitespace-nowrap rounded-lg border border-transparent bg-text/5 px-2 py-0 text-sm text-default enabled:hover:bg-primary-ghost-hover disabled:cursor-not-allowed disabled:opacity-40";
   btn.textContent = label;
   btn.addEventListener("click", (e) => {
     e.preventDefault();
@@ -2023,7 +1979,7 @@ function storeIconButton(
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className =
-    "border-token-border user-select-none no-drag cursor-interaction flex h-8 w-8 items-center justify-center rounded-lg border border-transparent bg-token-foreground/5 p-0 text-token-foreground enabled:hover:bg-token-foreground/10 disabled:cursor-not-allowed disabled:opacity-40";
+    "border-default select-none no-drag cursor-interaction flex h-8 w-8 items-center justify-center rounded-lg border border-transparent bg-text/5 p-0 text-default enabled:hover:bg-primary-ghost-hover disabled:cursor-not-allowed disabled:opacity-40";
   btn.innerHTML = iconSvg;
   btn.setAttribute("aria-label", label);
   btn.title = label;
@@ -2047,9 +2003,9 @@ function refreshIconSvg(): string {
 function verifiedSafeBadge(): HTMLElement {
   const badge = document.createElement("span");
   badge.className =
-    "inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md border border-token-border/30 bg-transparent px-2 text-xs font-medium text-token-description-foreground";
+    "inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md border border-subtle bg-transparent px-2 text-xs font-medium text-codex-description";
   badge.innerHTML =
-    `<svg width="13" height="13" viewBox="0 0 14 14" fill="none" class="text-blue-500" aria-hidden="true">` +
+    `<svg width="13" height="13" viewBox="0 0 14 14" fill="none" class="text-info" aria-hidden="true">` +
     `<path d="M7 1.75 11.25 3.4v3.2c0 2.6-1.65 4.25-4.25 5.4-2.6-1.15-4.25-2.8-4.25-5.4V3.4L7 1.75Z" stroke="currentColor" stroke-width="1.15" stroke-linejoin="round"/>` +
     `<path d="M4.85 7.05 6.3 8.45l2.85-3.05" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>` +
     `</svg>` +
@@ -2079,8 +2035,8 @@ function storeVersionBadgeShell(hasUpdate: boolean): HTMLElement {
   badge.className = [
     "inline-flex h-8 min-w-0 max-w-full items-center rounded-lg border px-2.5 text-xs font-medium",
     hasUpdate
-      ? "border-blue-500/30 bg-blue-500/10 text-token-foreground"
-      : "border-token-border/40 bg-token-foreground/5 text-token-description-foreground",
+      ? "border-chart-blue/40 bg-info-soft text-default"
+      : "border-subtle bg-text/5 text-codex-description",
   ].join(" ");
   return badge;
 }
@@ -2090,8 +2046,8 @@ function storeStatusPill(label: string, tone: "neutral" | "info" = "neutral"): H
   pill.className = [
     "inline-flex h-8 items-center justify-center whitespace-nowrap rounded-lg px-3 text-sm font-medium",
     tone === "info"
-      ? "border border-blue-500/30 bg-blue-500/10 text-token-foreground"
-      : "bg-token-foreground/5 text-token-description-foreground",
+      ? "border border-chart-blue/40 bg-info-soft text-default"
+      : "bg-text/5 text-codex-description",
   ].join(" ");
   pill.textContent = label;
   return pill;
@@ -2111,10 +2067,9 @@ function storeInstallButton(label: string, onClick: (button: HTMLButtonElement) 
   return btn;
 }
 
-function storeInstallButtonClass(extra = ""): string {
+function storeInstallButtonClass(): string {
   return [
-    "border-token-border user-select-none no-drag cursor-interaction flex h-8 min-w-[82px] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-blue-500/40 bg-blue-500 px-3 py-0 text-sm font-medium text-token-foreground shadow-sm transition-colors enabled:hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-80",
-    extra,
+    "select-none no-drag cursor-interaction flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-transparent bg-info-solid px-3 py-0 text-sm font-medium text-info-solid shadow-sm transition-colors not-disabled:not-aria-disabled:hover:bg-info-solid/90 disabled:cursor-not-allowed disabled:opacity-80",
   ].filter(Boolean).join(" ");
 }
 
@@ -2131,7 +2086,7 @@ function showStoreButtonLoading(button: HTMLButtonElement, label: string): void 
 }
 
 function showStoreButtonInstalled(button: HTMLButtonElement): void {
-  button.className = storeInstallButtonClass("border-blue-500 bg-blue-500");
+  button.className = storeInstallButtonClass();
   button.disabled = true;
   button.removeAttribute("aria-busy");
   button.innerHTML =
@@ -2153,12 +2108,12 @@ function showStoreToast(message: string): void {
   if (!host) {
     host = document.createElement("div");
     host.dataset.codexppStoreToastHost = "true";
-    host.className = "pointer-events-none fixed bottom-5 right-5 z-[9999] flex flex-col items-end gap-2";
+    host.className = "pointer-events-none fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2";
     document.body.appendChild(host);
   }
   const toast = document.createElement("div");
   toast.className =
-    "translate-y-2 rounded-xl border border-token-border/50 bg-token-main-surface-primary px-3 py-2 text-sm font-medium text-token-foreground opacity-0 shadow-lg transition-all duration-200";
+    "translate-y-2 rounded-xl border border-subtle bg-surface px-3 py-2 text-sm font-medium text-default opacity-0 shadow-lg transition-all duration-200";
   toast.textContent = message;
   host.appendChild(toast);
   requestAnimationFrame(() => {
@@ -2176,14 +2131,14 @@ function showStoreToast(message: string): void {
 function storeMessageCard(title: string, description?: string): HTMLElement {
   const card = document.createElement("div");
   card.className =
-    "border-token-border/40 flex min-h-[84px] flex-col justify-center gap-1 rounded-2xl border p-4 text-sm";
+    "border-subtle flex min-h-[84px] flex-col justify-center gap-1 rounded-2xl border p-4 text-sm";
   const t = document.createElement("div");
-  t.className = "font-medium text-token-text-primary";
+  t.className = "font-medium text-default";
   t.textContent = title;
   card.appendChild(t);
   if (description) {
     const d = document.createElement("div");
-    d.className = "text-token-text-secondary";
+    d.className = "text-secondary";
     d.textContent = description;
     card.appendChild(d);
   }
@@ -2297,10 +2252,10 @@ function tweakRow(
   // ── Avatar ─────────────────────────────────────────────────────────────
   const avatar = document.createElement("div");
   avatar.className =
-    "flex shrink-0 items-center justify-center rounded-md border border-token-border overflow-hidden text-token-text-secondary";
+    "flex shrink-0 items-center justify-center rounded-md border border-default overflow-hidden text-secondary";
   avatar.style.width = "56px";
   avatar.style.height = "56px";
-  avatar.style.backgroundColor = "var(--color-token-bg-fog, transparent)";
+  avatar.style.backgroundColor = "var(--color-surface-card)";
   if (m.iconUrl) {
     const img = document.createElement("img");
     img.alt = "";
@@ -2340,20 +2295,20 @@ function tweakRow(
   const titleRow = document.createElement("div");
   titleRow.className = "flex items-center gap-2";
   const name = document.createElement("div");
-  name.className = "min-w-0 text-sm font-medium text-token-text-primary";
+  name.className = "min-w-0 text-sm font-medium text-default";
   name.textContent = m.name;
   titleRow.appendChild(name);
   if (m.version) {
     const ver = document.createElement("span");
     ver.className =
-      "text-token-text-secondary text-xs font-normal tabular-nums";
+      "text-secondary text-xs font-normal tabular-nums";
     ver.textContent = `v${m.version}`;
     titleRow.appendChild(ver);
   }
   if (t.update?.updateAvailable) {
     const badge = document.createElement("span");
     badge.className =
-      "rounded-full border border-token-border bg-token-foreground/5 px-2 py-0.5 text-[11px] font-medium text-token-text-primary";
+      "rounded-full border border-default bg-text/5 px-2 py-0.5 text-[11px] font-medium text-default";
     badge.textContent = "Update Available";
     titleRow.appendChild(badge);
   }
@@ -2361,20 +2316,20 @@ function tweakRow(
 
   if (m.description) {
     const desc = document.createElement("div");
-    desc.className = "text-token-text-secondary min-w-0 text-sm";
+    desc.className = "text-secondary min-w-0 text-sm";
     desc.textContent = m.description;
     stack.appendChild(desc);
   }
 
   const meta = document.createElement("div");
-  meta.className = "flex items-center gap-2 text-xs text-token-text-secondary";
+  meta.className = "flex items-center gap-2 text-xs text-secondary";
   const authorEl = renderAuthor(m.author);
   if (authorEl) meta.appendChild(authorEl);
   if (m.githubRepo) {
     if (meta.children.length > 0) meta.appendChild(dot());
     const repo = document.createElement("button");
     repo.type = "button";
-    repo.className = "inline-flex text-token-text-link-foreground hover:underline";
+    repo.className = "inline-flex text-info hover:underline";
     repo.textContent = m.githubRepo;
     repo.addEventListener("click", (e) => {
       e.preventDefault();
@@ -2389,7 +2344,7 @@ function tweakRow(
     link.href = m.homepage;
     link.target = "_blank";
     link.rel = "noreferrer";
-    link.className = "inline-flex text-token-text-link-foreground hover:underline";
+    link.className = "inline-flex text-info hover:underline";
     link.textContent = "Homepage";
     meta.appendChild(link);
   }
@@ -2402,7 +2357,7 @@ function tweakRow(
     for (const tag of m.tags) {
       const pill = document.createElement("span");
       pill.className =
-        "rounded-full border border-token-border bg-token-foreground/5 px-2 py-0.5 text-[11px] text-token-text-secondary";
+        "rounded-full border border-default bg-text/5 px-2 py-0.5 text-[11px] text-secondary";
       pill.textContent = tag;
       tagsRow.appendChild(pill);
     }
@@ -2447,7 +2402,7 @@ function tweakRow(
   if (t.enabled && sections.length > 0) {
     const nested = document.createElement("div");
     nested.className =
-      "flex flex-col divide-y-[0.5px] divide-token-border border-t-[0.5px] border-token-border";
+      "flex flex-col divide-y-[0.5px] divide-border border-t-[0.5px] border-default";
     for (const s of sections) {
       const body = document.createElement("div");
       body.className = "p-3";
@@ -2478,7 +2433,7 @@ function renderAuthor(author: TweakManifest["author"]): HTMLElement | null {
     a.href = author.url;
     a.target = "_blank";
     a.rel = "noreferrer";
-    a.className = "inline-flex text-token-text-link-foreground hover:underline";
+    a.className = "inline-flex text-info hover:underline";
     a.textContent = author.name;
     wrap.appendChild(a);
   } else {
@@ -2495,11 +2450,11 @@ function openPublishTweakDialog(): void {
 
   const overlay = document.createElement("div");
   overlay.dataset.codexppPublishDialog = "true";
-  overlay.className = "fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4";
+  overlay.className = "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4";
 
   const dialog = document.createElement("div");
   dialog.className =
-    "flex w-full max-w-xl flex-col gap-4 rounded-lg border border-token-border bg-token-main-surface-primary p-4 shadow-xl";
+    "flex w-full max-w-xl flex-col gap-4 rounded-lg border border-default bg-surface p-4 shadow-xl";
   overlay.appendChild(dialog);
 
   const header = document.createElement("div");
@@ -2507,10 +2462,10 @@ function openPublishTweakDialog(): void {
   const titleStack = document.createElement("div");
   titleStack.className = "flex min-w-0 flex-col gap-1";
   const title = document.createElement("div");
-  title.className = "text-base font-medium text-token-text-primary";
+  title.className = "text-base font-medium text-default";
   title.textContent = "Publish Tweak";
   const subtitle = document.createElement("div");
-  subtitle.className = "text-sm text-token-text-secondary";
+  subtitle.className = "text-sm text-secondary";
   subtitle.textContent = "Submit a GitHub repo for admin review. CodexDC records the exact commit admins must review and pin.";
   titleStack.appendChild(title);
   titleStack.appendChild(subtitle);
@@ -2522,11 +2477,11 @@ function openPublishTweakDialog(): void {
   repoInput.type = "text";
   repoInput.placeholder = "owner/repo or https://github.com/owner/repo";
   repoInput.className =
-    "h-10 rounded-lg border border-token-border bg-transparent px-3 text-sm text-token-text-primary focus:outline-none";
+    "h-10 rounded-lg border border-default bg-transparent px-3 text-sm text-default focus:outline-none";
   dialog.appendChild(repoInput);
 
   const status = document.createElement("div");
-  status.className = "min-h-5 text-sm text-token-text-secondary";
+  status.className = "min-h-5 text-sm text-secondary";
   status.textContent = "The manifest should include an iconUrl suitable for the store.";
   dialog.appendChild(status);
 
@@ -2549,7 +2504,7 @@ async function submitPublishTweak(
   repoInput: HTMLInputElement,
   status: HTMLElement,
 ): Promise<void> {
-  status.className = "min-h-5 text-sm text-token-text-secondary";
+  status.className = "min-h-5 text-sm text-secondary";
   status.textContent = "Resolving the repo commit to review.";
   try {
     const submission = await ipcRenderer.invoke(
@@ -2560,7 +2515,7 @@ async function submitPublishTweak(
     await ipcRenderer.invoke("codexpp:open-external", url);
     status.textContent = `GitHub review issue opened for ${submission.commitSha.slice(0, 7)}.`;
   } catch (e) {
-    status.className = "min-h-5 text-sm text-token-charts-red";
+    status.className = "min-h-5 text-sm text-chart-red";
     status.textContent = String((e as Error).message ?? e);
   }
 }
@@ -2580,7 +2535,7 @@ function panelShell(
   headerTitleActions: HTMLElement;
 } {
   const outer = document.createElement("div");
-  outer.className = "main-surface flex h-full min-h-0 flex-col";
+  outer.className = "bg-surface flex h-full min-h-0 flex-col";
 
   const toolbar = document.createElement("div");
   toolbar.className =
@@ -2594,8 +2549,8 @@ function panelShell(
   const inner = document.createElement("div");
   inner.className =
     options?.wide
-      ? "mx-auto flex w-full max-w-5xl flex-col electron:min-w-[calc(320px*var(--codex-window-zoom))]"
-      : "mx-auto flex w-full flex-col max-w-2xl electron:min-w-[calc(320px*var(--codex-window-zoom))]";
+      ? "mx-auto flex w-full max-w-5xl flex-col"
+      : "mx-auto flex w-full flex-col max-w-2xl";
   scroll.appendChild(inner);
 
   const headerWrap = document.createElement("div");
@@ -2605,7 +2560,7 @@ function panelShell(
   const titleLine = document.createElement("div");
   titleLine.className = "flex min-w-0 items-center gap-2";
   const heading = document.createElement("div");
-  heading.className = "electron:heading-lg heading-base truncate";
+  heading.className = "heading-lg truncate";
   heading.textContent = title;
   titleLine.appendChild(heading);
   const headerTitleActions = document.createElement("div");
@@ -2615,7 +2570,7 @@ function panelShell(
   let subtitleElement: HTMLElement | undefined;
   if (subtitle) {
     const sub = document.createElement("div");
-    sub.className = "text-token-text-secondary text-sm";
+    sub.className = "text-secondary text-sm";
     sub.textContent = subtitle;
     headerInner.appendChild(sub);
     subtitleElement = sub;
@@ -2640,7 +2595,7 @@ function sectionTitle(text: string, trailing?: HTMLElement): HTMLElement {
   const titleInner = document.createElement("div");
   titleInner.className = "flex min-w-0 flex-1 flex-col gap-1";
   const t = document.createElement("div");
-  t.className = "text-base font-medium text-token-text-primary";
+  t.className = "text-base font-medium text-default";
   t.textContent = text;
   titleInner.appendChild(t);
   titleRow.appendChild(titleInner);
@@ -2661,7 +2616,7 @@ function openInPlaceButton(label: string, onClick: () => void): HTMLButtonElemen
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className =
-    "border-token-border user-select-none no-drag cursor-interaction flex items-center gap-1 border whitespace-nowrap focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 rounded-lg text-token-description-foreground enabled:hover:bg-token-list-hover-background data-[state=open]:bg-token-list-hover-background border-transparent h-token-button-composer px-2 py-0 text-base leading-[18px]";
+    "border-default select-none no-drag cursor-interaction flex items-center gap-1 border whitespace-nowrap focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 rounded-lg text-codex-description enabled:hover:bg-primary-ghost-hover data-[state=open]:bg-primary-ghost-hover border-transparent h-8 px-2 py-0 text-base leading-[18px]";
   btn.innerHTML =
     `${label}` +
     `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" class="icon-2xs" aria-hidden="true">` +
@@ -2679,7 +2634,7 @@ function compactButton(label: string, onClick: () => void): HTMLButtonElement {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className =
-    "border-token-border user-select-none no-drag cursor-interaction inline-flex h-8 items-center whitespace-nowrap rounded-lg border px-2 text-sm text-token-text-primary enabled:hover:bg-token-list-hover-background disabled:cursor-not-allowed disabled:opacity-40";
+    "border-default select-none no-drag cursor-interaction inline-flex h-8 items-center whitespace-nowrap rounded-lg border px-2 text-sm text-default enabled:hover:bg-primary-ghost-hover disabled:cursor-not-allowed disabled:opacity-40";
   btn.textContent = label;
   btn.addEventListener("click", (e) => {
     e.preventDefault();
@@ -2692,11 +2647,7 @@ function compactButton(label: string, onClick: () => void): HTMLButtonElement {
 function roundedCard(): HTMLElement {
   const card = document.createElement("div");
   card.className =
-    "border-token-border flex flex-col divide-y-[0.5px] divide-token-border rounded-lg border";
-  card.setAttribute(
-    "style",
-    "background-color: var(--color-background-panel, var(--color-token-bg-fog));",
-  );
+    "border-default bg-surface-card flex flex-col divide-y-[0.5px] divide-border rounded-lg border";
   return card;
 }
 
@@ -2709,13 +2660,13 @@ function rowSimple(title: string | undefined, description?: string): HTMLElement
   stack.className = "flex min-w-0 flex-col gap-1";
   if (title) {
     const t = document.createElement("div");
-    t.className = "min-w-0 text-sm text-token-text-primary";
+    t.className = "min-w-0 text-sm text-default";
     t.textContent = title;
     stack.appendChild(t);
   }
   if (description) {
     const d = document.createElement("div");
-    d.className = "text-token-text-secondary min-w-0 text-sm";
+    d.className = "text-secondary min-w-0 text-sm";
     d.textContent = description;
     stack.appendChild(d);
   }
@@ -2739,20 +2690,20 @@ function switchControl(
   const pill = document.createElement("span");
   const knob = document.createElement("span");
   knob.className =
-    "rounded-full border border-[color:var(--gray-0)] bg-[color:var(--gray-0)] shadow-sm transition-transform duration-200 ease-out h-4 w-4";
+    "rounded-full border border-control-thumb-on-accent bg-control-thumb-on-accent shadow-sm transition-transform duration-basic ease-out h-4 w-4 data-[state=unchecked]:translate-x-[2px] data-[state=checked]:translate-x-[14px] rtl:data-[state=unchecked]:-translate-x-[2px] rtl:data-[state=checked]:-translate-x-[14px]";
+  pill.setAttribute("aria-hidden", "true");
   pill.appendChild(knob);
 
   const apply = (on: boolean): void => {
     btn.setAttribute("aria-checked", String(on));
     btn.dataset.state = on ? "checked" : "unchecked";
     btn.className =
-      "inline-flex items-center text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-token-focus-border focus-visible:rounded-full cursor-interaction";
-    pill.className = `relative inline-flex shrink-0 items-center rounded-full transition-colors duration-200 ease-out h-5 w-8 ${
-      on ? "bg-token-charts-blue" : "bg-token-foreground/20"
+      "inline-flex items-center text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded-full cursor-interaction disabled:cursor-not-allowed disabled:opacity-60";
+    pill.className = `relative inline-flex shrink-0 items-center rounded-full transition-colors duration-basic ease-out h-5 w-8 ${
+      on ? "bg-chart-blue" : "bg-text/10"
     }`;
     pill.dataset.state = on ? "checked" : "unchecked";
     knob.dataset.state = on ? "checked" : "unchecked";
-    knob.style.transform = on ? "translateX(14px)" : "translateX(2px)";
   };
   apply(initial);
 
@@ -2774,7 +2725,7 @@ function switchControl(
 
 function dot(): HTMLElement {
   const s = document.createElement("span");
-  s.className = "text-token-description-foreground";
+  s.className = "text-codex-description";
   s.textContent = "·";
   return s;
 }
@@ -2847,32 +2798,15 @@ async function resolveIconUrl(
 // ─────────────────────────────────────────────────────── DOM heuristics ──
 
 function findSidebarItemsGroup(): HTMLElement | null {
-  const candidates = Array.from(
-    document.querySelectorAll<HTMLElement>("aside,nav,[role='navigation'],div"),
+  // Native Settings provides a navigation landmark and a dedicated scroll
+  // container. Keep all injected sections inside it, alongside native groups.
+  const lists = document.querySelectorAll<HTMLElement>(
+    "nav.sidebar-navigation .overflow-y-auto",
   );
-
-  let best: HTMLElement | null = null;
-  let bestScore = -1;
-  let bestArea = Number.POSITIVE_INFINITY;
-
-  for (const candidate of candidates) {
-    if (candidate.dataset.codexpp) continue;
-    if (!isSettingsSidebarCandidate(candidate)) continue;
-
-    const labels = codexPpSettingsLabelsFrom(candidate);
-    const score = codexPpSettingsLabelScore(labels);
-    const rect = candidate.getBoundingClientRect();
-    const area = rect.width * rect.height;
-    const weighted = score.core * 100 + score.total;
-
-    if (weighted > bestScore || (weighted === bestScore && area < bestArea)) {
-      best = candidate;
-      bestScore = weighted;
-      bestArea = area;
-    }
+  for (const list of Array.from(lists)) {
+    if (isSettingsSidebarCandidate(list, true)) return list;
   }
-
-  return best;
+  return null;
 }
 
 const FORBIDDEN_SETTINGS_SIDEBAR_SELECTOR = [
@@ -2917,7 +2851,7 @@ function isSettingsSidebarCandidate(el: HTMLElement, allowKnownRoot = false): bo
 
 function removeMisplacedSettingsGroups(): void {
   const groups = document.querySelectorAll<HTMLElement>(
-    "[data-codexpp='nav-group'], [data-codexpp='pages-group'], [data-codexpp='native-nav-header']",
+    "[data-codexpp='nav-group'], [data-codexpp='pages-group']",
   );
   for (const group of Array.from(groups)) {
     if (isCodexPpInjectedSettingsGroupPlacementValid(group)) continue;
@@ -2949,9 +2883,6 @@ function resetCodexPpInjectedSettingsGroupState(group: HTMLElement): void {
     state.pagesGroup = null;
     state.pagesGroupKey = null;
     for (const p of state.pages.values()) p.navButton = null;
-  }
-  if (state.nativeNavHeader === group || (state.nativeNavHeader && group.contains(state.nativeNavHeader))) {
-    state.nativeNavHeader = null;
   }
   if (state.sidebarRoot && state.sidebarRoot.contains(group)) {
     state.sidebarRoot = null;

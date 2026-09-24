@@ -15,6 +15,7 @@ import { startSettingsInjector } from "./settings-injector";
 import { startTweakHost, teardownTweakHost } from "./tweak-host";
 import { mountBackendSettings } from "./backend-settings";
 import { mountManager } from "./manager";
+import { installHeaderBranding } from "./header-branding";
 
 const BROWSER_UI_CONNECT_PORT = "codexpp:browser-ui-connect-app-host";
 const BROWSER_UI_BRIDGE_REQUEST = "codexpp:browser-ui-bridge-request";
@@ -96,6 +97,7 @@ queueMicrotask(() => {
 async function boot() {
   fileLog("boot start", { readyState: document.readyState });
   try {
+    installHeaderBranding();
     startSettingsInjector();
     fileLog("settings injector started");
     await startTweakHost();

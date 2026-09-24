@@ -3,6 +3,9 @@
 A separate, locally patched Codex desktop with optional tweaks and a selectable
 CLI backend. Independent project derived from Codex++; not an official OpenAI app.
 
+The top-left mode caption displays **Codex DC** or **ChatGPT DC** by default.
+The dropdown menu retains the original product names.
+
 ## Status
 
 Development preview. Windows builds and automated tests run in CI. macOS arm64
