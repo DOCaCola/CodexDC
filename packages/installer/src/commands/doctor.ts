@@ -93,7 +93,7 @@ export async function doctor(): Promise<void> {
     checks.push({
       name: "code signature",
       ok: sig.ok,
-      detail: sig.ok ? "valid (ad-hoc)" : sig.output.split("\n")[0],
+      detail: sig.ok ? "valid" : sig.output.split("\n")[0],
     });
   }
 

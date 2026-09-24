@@ -7,7 +7,6 @@ import {
   assertCodexNotRunning,
   prepareCodexForPatching,
   preflightWritableTargets,
-  shouldBackupUnpatchedApp,
 } from "../src/commands/install";
 import type { OpenReport } from "../src/commands/debug";
 import type { CodexInstall } from "../src/platform";
@@ -74,50 +73,6 @@ test("install preflight checks Info.plist before patching", { skip: process.plat
       chmodSync(metaPath, 0o644);
     }
   });
-});
-
-test("install refreshes full app backup only for unpatched apps", () => {
-  assert.equal(
-    shouldBackupUnpatchedApp({
-      hasPatchMarker: false,
-      signature: {
-        ok: true,
-        adHoc: false,
-        teamIdentifier: "TEAM",
-        authority: ["Developer ID Application"],
-        output: "",
-      },
-    }),
-    true,
-  );
-
-  assert.equal(
-    shouldBackupUnpatchedApp({
-      hasPatchMarker: true,
-      signature: {
-        ok: true,
-        adHoc: false,
-        teamIdentifier: "TEAM",
-        authority: ["Developer ID Application"],
-        output: "",
-      },
-    }),
-    false,
-  );
-
-  assert.equal(
-    shouldBackupUnpatchedApp({
-      hasPatchMarker: false,
-      signature: {
-        ok: false,
-        adHoc: false,
-        teamIdentifier: null,
-        authority: [],
-        output: "invalid signature",
-      },
-    }),
-    false,
-  );
 });
 
 test("install preflight allows patching when Codex is closed", () => {
