@@ -223,7 +223,7 @@ prog
   .describe("Link a tweak into the CodexDC tweaks directory for local development")
   .option("--name", "Override linked directory name; defaults to manifest id")
   .option("--replace", "Replace an existing symlink at the target tweak id")
-  .option("--no-watch", "Link once and exit instead of watching for changes")
+  .option("--watch", "Watch linked source for changes; --no-watch links once and exits", true)
   .action(wrap(runDevTweak));
 
 prog

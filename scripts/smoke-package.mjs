@@ -15,6 +15,14 @@ try {
   mkdirSync(options.env.CODEXDC_HOME, { recursive: true });
   execFileSync(node, [cli, "--help"], options);
   assert.deepEqual(JSON.parse(execFileSync(node, [cli, "backend", "status"], options)), { provider: "bundled" });
+  const tweak = join(stage, "development tweak");
+  mkdirSync(tweak);
+  writeFileSync(join(tweak, "manifest.json"), JSON.stringify({
+    id: "test.development", name: "Development", version: "1.0.0", scope: "renderer", main: "index.js",
+  }));
+  writeFileSync(join(tweak, "index.js"), "exports.start = () => {};");
+  execFileSync(node, [cli, "dev", tweak, "--no-watch"], { ...options, timeout: 10_000 });
+  assert.equal(realpathSync(join(options.env.CODEXDC_HOME, "tweaks", "test.development")), realpathSync(tweak));
   // Setup shortcuts retain their original command after updates. Exercise that
   // old entry point across two activations using real child processes.
   for (const version of ["next", "newest"]) {
