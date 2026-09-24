@@ -1,5 +1,6 @@
 import kleur from "kleur";
 import { prepareBackend } from "../backend.js";
+import { stageWindowsTaskbarIcons, windowsTaskbarIconPath } from "../windows-taskbar-icons.js";
 import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, readFileSync, writeFileSync, mkdirSync, openSync, closeSync, unlinkSync, readdirSync, rmSync, copyFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -68,6 +69,12 @@ export async function install(opts: Opts = {}): Promise<void> {
   preflightSystemTools(codex.platform, resign, codex.metaPath !== null);
   step("Preparing selected Codex CLI");
   await prepareBackend();
+  if (codex.platform === "win32") {
+    const packageRoot = codex.sourceAppRoot
+      ? dirname(codex.sourceAppRoot)
+      : join(process.env.ProgramFiles!, "WindowsApps", basename(dirname(codex.appRoot)));
+    stageWindowsTaskbarIcons(packageRoot, codex.resourcesDir);
+  }
   const reopenAfterPatch = preflightAppClosed(codex, step);
 
   // Pre-flight every app-bundle target we will mutate so permission failures
@@ -869,8 +876,7 @@ function installWindowsManagedAppLauncher(codex: CodexInstall): { shortcutPaths:
   if (!startMenuRoot) return { shortcutPaths };
 
   const startMenuShortcut = join(startMenuRoot, "CodexDC.lnk");
-  const iconPathCandidate = join(dirname(codex.executable), "resources", "icon-chatgpt.ico");
-  const iconPath = existsSync(iconPathCandidate) ? iconPathCandidate : undefined;
+  const iconPath = windowsTaskbarIconPath(codex.resourcesDir);
   if (createWindowsCodexShortcut(startMenuShortcut, commandPath, iconPath, codex.appUserModelId)) {
     shortcutPaths.push(startMenuShortcut);
   }

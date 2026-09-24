@@ -7,7 +7,7 @@
  * We are in CJS land here (matches Electron's main process and Codex's own
  * code). The renderer-side runtime is bundled separately into preload.js.
  */
-import { app, BrowserView, BrowserWindow, clipboard, dialog, ipcMain, session, shell, webContents } from "electron";
+import { app, BrowserView, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, session, shell, webContents } from "electron";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { execFile, execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash, randomInt, randomUUID } from "node:crypto";
@@ -33,6 +33,7 @@ import {
 } from "./codex-runtime-probe";
 import { applyWindowsShellBootstrap } from "./windows-shell-bootstrap";
 import { inferWindowsAppUserModelId } from "./windows-app-identity";
+import { windowsTaskbarIconPath, windowsTaskbarHelperArgs } from "./windows-taskbar-icon";
 import { reconcileDesktopThreadPermissions } from "./desktop-permission-state";
 import { NativeBridge, type NativeTweakContext } from "./native-bridge";
 import type { TweakManifest } from "@codexdc/sdk";
@@ -93,10 +94,6 @@ const WINDOWS_APP_USER_MODEL_ID =
     ? WINDOWS_INFERRED_APP_USER_MODEL_ID ??
       cleanOptionalString(process.env.CODEXDC_APP_USER_MODEL_ID)
     : null;
-const WINDOWS_WINDOW_ICON_PATH =
-  process.platform === "win32" && process.resourcesPath
-    ? join(process.resourcesPath, "icon-chatgpt.ico")
-    : null;
 const maintenanceState = readInstallerState();
 const WINDOWS_RELAUNCH_COMMAND = process.platform === "win32" && maintenanceState?.nodePath && maintenanceState.sourceRoot
   ? `"${maintenanceState.nodePath}" "${join(maintenanceState.sourceRoot, "packages", "installer", "dist", "cli.js")}" launch`
@@ -116,10 +113,16 @@ if (process.platform === "win32") {
     log,
   });
 }
+let taskbarRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 configureWindowsAppUserModelId();
+if (process.platform === "win32") {
+  nativeTheme.on("updated", refreshWindowsTaskbarIcons);
+  void app.whenReady().then(refreshWindowsTaskbarIcons);
+}
 app.on("browser-window-created", (_event, win) => {
   applyWindowsWindowIcon(win);
   win.once("ready-to-show", () => applyWindowsWindowIcon(win));
+  if (process.platform === "win32") win.once("show", refreshWindowsTaskbarIcons);
 });
 applyWindowsShellBootstrap(log, { codexConfigPath: CODEX_CONFIG_FILE });
 
@@ -306,28 +309,44 @@ function configureWindowsAppUserModelId(): void {
 }
 
 function applyWindowsWindowIcon(win: Electron.BrowserWindow): void {
-  if (process.platform !== "win32" || !WINDOWS_WINDOW_ICON_PATH) return;
-  if (win.isDestroyed() || !existsSync(WINDOWS_WINDOW_ICON_PATH)) return;
+  if (process.platform !== "win32" || win.isDestroyed()) return;
+  const iconPath = windowsTaskbarIconPath(process.resourcesPath, nativeTheme.shouldUseDarkColorsForSystemIntegratedUI);
+  if (!existsSync(iconPath)) {
+    log("warn", "Stock taskbar icons are missing; run Codex-DC Setup → Repair.");
+    return;
+  }
 
   try {
-    if (WINDOWS_APP_USER_MODEL_ID && typeof win.setAppDetails === "function") {
-      win.setAppDetails({
-        appId: WINDOWS_APP_USER_MODEL_ID,
-        appIconPath: WINDOWS_WINDOW_ICON_PATH,
-        appIconIndex: 0,
-        relaunchCommand: WINDOWS_RELAUNCH_COMMAND ?? undefined,
-        relaunchDisplayName: "Codex-DC",
-      });
-    }
-    win.setIcon(WINDOWS_WINDOW_ICON_PATH);
+    win.setIcon(iconPath);
     log("info", "Windows taskbar icon configured", {
       windowId: win.id,
       appUserModelId: WINDOWS_APP_USER_MODEL_ID,
-      iconPath: WINDOWS_WINDOW_ICON_PATH,
+      iconPath,
     });
   } catch (error) {
     log("warn", "Failed to set Windows window icon:", String((error as Error).message));
   }
+}
+
+function refreshWindowsTaskbarIcons(): void {
+  if (!app.isReady()) return;
+  for (const win of BrowserWindow.getAllWindows()) applyWindowsWindowIcon(win);
+  const iconPath = windowsTaskbarIconPath(process.resourcesPath, nativeTheme.shouldUseDarkColorsForSystemIntegratedUI);
+  if (!WINDOWS_APP_USER_MODEL_ID || !WINDOWS_RELAUNCH_COMMAND || !existsSync(iconPath)) return;
+  if (taskbarRefreshTimer) clearTimeout(taskbarRefreshTimer);
+  taskbarRefreshTimer = setTimeout(() => {
+    taskbarRefreshTimer = null;
+    const windows = BrowserWindow.getAllWindows();
+    if (!windows.length) return;
+    execFile("powershell.exe", windowsTaskbarHelperArgs(
+      join(runtimeDir!, "platform", "windows", "taskbar-icons.ps1"), iconPath,
+      WINDOWS_APP_USER_MODEL_ID, process.pid, WINDOWS_RELAUNCH_COMMAND,
+      windows.map(win => win.getNativeWindowHandle().readBigUInt64LE().toString()),
+    ), { windowsHide: true, timeout: 15_000 }, (error, stdout, stderr) => {
+      if (error) log("warn", "Windows taskbar properties update failed:", stderr || error.message);
+      else log("info", "Windows taskbar properties updated:", stdout.trim());
+    });
+  }, 200);
 }
 
 function isPathInside(parent: string, target: string): boolean {
