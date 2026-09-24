@@ -2,7 +2,7 @@ import kleur from "kleur";
 import { prepareBackend } from "../backend.js";
 import { stageWindowsTaskbarIcons, windowsTaskbarIconPath } from "../windows-taskbar-icons.js";
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, existsSync, readFileSync, writeFileSync, mkdirSync, openSync, closeSync, unlinkSync, readdirSync, rmSync, copyFileSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, writeFileSync, mkdirSync, openSync, closeSync, unlinkSync, readdirSync, copyFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,7 +10,7 @@ import { locateCodex, type CodexInstall } from "../platform.js";
 import { ensureUserPaths } from "../paths.js";
 import { backupOnce, patchAsar, readFileInAsar, readHeaderHash } from "../asar.js";
 import { prepareIntegrityUpdate } from "../integrity.js";
-import { clearQuarantine, prepareCodeSigning, signCodexApp, signatureInfo } from "../codesign.js";
+import { clearQuarantine, prepareCodeSigning, signCodexApp } from "../codesign.js";
 import { readPlist } from "../plist.js";
 import { writeState } from "../state.js";
 import { CODEXDC_VERSION } from "../version.js";
@@ -96,24 +96,15 @@ export async function install(opts: Opts = {}): Promise<void> {
   step.detail(`User dir: ${kleur.cyan(paths.root)}`);
   step(formatCliStep(formatCliShimResult(installCliShims(paths.binDir))));
 
-  // 1. Backup originals.
-  const pristineAppBackup = codex.platform === "darwin" ? join(paths.backup, "Codex.app") : null;
-  const backupAsar = join(paths.backup, "app.asar");
-  const backupAsarUnpacked = join(paths.backup, "app.asar.unpacked");
-  const backupPlist = codex.metaPath ? join(paths.backup, "Info.plist") : null;
-  let appBackupRefreshed = false;
-  if (pristineAppBackup) {
-    appBackupRefreshed = backupUnpatchedApp(codex.appRoot, pristineAppBackup, {
-      hasPatchMarker,
-      step: step.detail,
-    });
+  // macOS repairs copy the official app; installManagedMac owns bundle rollback.
+  if (codex.platform !== "darwin") {
+    backupOnce(codex.asarPath, join(paths.backup, "app.asar"));
+    if (existsSync(`${codex.asarPath}.unpacked`)) {
+      backupOnce(`${codex.asarPath}.unpacked`, join(paths.backup, "app.asar.unpacked"));
+    }
+    if (codex.metaPath) backupOnce(codex.metaPath, join(paths.backup, "Info.plist"));
+    step("Backup ready");
   }
-  backupOnce(codex.asarPath, backupAsar);
-  if (existsSync(`${codex.asarPath}.unpacked`)) {
-    backupOnce(`${codex.asarPath}.unpacked`, backupAsarUnpacked);
-  }
-  if (codex.metaPath && backupPlist) backupOnce(codex.metaPath, backupPlist);
-  step(appBackupRefreshed ? "Backup refreshed" : "Backup ready");
 
   // 2. Stage runtime + loader into the user dir.
   stageAssets(paths.runtime);
@@ -235,25 +226,6 @@ export function readCodexVersion(metaPath: string | null): string | null {
   } catch {
     return null;
   }
-}
-
-export function shouldBackupUnpatchedApp(input: { hasPatchMarker: boolean; signature: ReturnType<typeof signatureInfo> }): boolean {
-  if (input.hasPatchMarker) return false;
-  return input.signature.ok;
-}
-
-export function backupUnpatchedApp(
-  appRoot: string,
-  backupPath: string,
-  opts: { hasPatchMarker: boolean; step?: (msg: string) => void },
-): boolean {
-  const sig = signatureInfo(appRoot);
-  if (!shouldBackupUnpatchedApp({ hasPatchMarker: opts.hasPatchMarker, signature: sig })) return false;
-
-  rmSync(backupPath, { recursive: true, force: true });
-  execFileSync("ditto", [appRoot, backupPath], { stdio: "ignore" });
-  opts.step?.(`Backed up unpatched Codex.app to ${kleur.cyan(backupPath)}`);
-  return true;
 }
 
 export function hasCodexPlusPlusAsarMarker(asarPath: string): boolean {
