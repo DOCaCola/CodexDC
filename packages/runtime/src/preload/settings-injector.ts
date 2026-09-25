@@ -885,7 +885,7 @@ function activatePage(page: ActivePage): void {
   if (!panel) {
     panel = document.createElement("div");
     panel.dataset.codexpp = "tweaks-panel";
-    panel.style.cssText = "width:100%;height:100%;overflow:auto;";
+    panel.style.cssText = "width:100%;min-height:0;flex:1;overflow:auto;";
     content.appendChild(panel);
   }
   panel.style.display = "block";
@@ -2903,16 +2903,11 @@ function resetCodexPpInjectedSettingsGroupState(group: HTMLElement): void {
 function findContentArea(): HTMLElement | null {
   const sidebar = findSidebarItemsGroup();
   if (!sidebar) return null;
-  let parent = sidebar.parentElement;
-  while (parent) {
-    for (const child of Array.from(parent.children) as HTMLElement[]) {
-      if (child === sidebar || child.contains(sidebar)) continue;
-      const r = child.getBoundingClientRect();
-      if (r.width > 300 && r.height > 200) return child;
-    }
-    parent = parent.parentElement;
-  }
-  return null;
+  const frame = sidebar.closest("[data-app-shell-frame]");
+  const viewport = frame?.querySelector<HTMLElement>(
+    'main[data-app-shell-main-surface="default"] [class*="_MainContentViewport_"]',
+  );
+  return viewport && codexPpVisibleBox(viewport) ? viewport : null;
 }
 
 function maybeDumpDom(): void {
