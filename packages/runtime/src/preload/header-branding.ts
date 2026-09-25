@@ -1,11 +1,13 @@
 const STYLE_ID = "codexdc-header-branding";
 
-// The product-mode trigger has an explicit accessible label. Its nested caption span
-// is the visible caption; menu items are rendered separately in a portal.
-// Generated content leaves React's text, the accessible label, and menu items intact.
+// The current product-mode caption is an SVG wordmark inside a flex span.
+// Add the suffix to that same flex row while leaving the menu and accessible label intact.
 export const HEADER_BRANDING_CSS = `
-[aria-haspopup="menu"][aria-label^="Switch mode, current mode:"] span.truncate::after {
-  content: " DC";
+[aria-haspopup="menu"][aria-label^="Switch mode, current mode:"] span:has(> svg[data-no-autosize])::after {
+  content: "DC";
+  flex: none;
+  margin-inline-start: 0.35em;
+  white-space: nowrap;
 }
 `;
 
