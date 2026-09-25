@@ -27,7 +27,7 @@ export interface CodexInstall {
   asarPath: string;
   /** Path to Info.plist (mac) or equivalent metadata file. */
   metaPath: string | null;
-  /** Desktop executable, excluding the managed macOS launch wrapper. */
+  /** Native desktop executable. */
   executable: string;
   /** Human-readable app name, when available. */
   appName: string;

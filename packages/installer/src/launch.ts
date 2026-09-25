@@ -6,8 +6,16 @@ import { userPaths } from "./paths.js";
 import { readState } from "./state.js";
 import { resolveWindowsExecutable } from "./platform.js";
 import { maintainBeforeLaunch } from "./launch-maintenance.js";
+import { launchMacDesktop } from "./mac-desktop-launch.js";
+import { waitForProcessExit } from "./commands/repair-after-exit.js";
 
 export async function launchManaged(): Promise<void> {
+  if (process.platform === "darwin" && process.env.CODEXDC_LAUNCH_PARENT !== undefined) {
+    const pid = Number(process.env.CODEXDC_LAUNCH_PARENT);
+    if (!Number.isSafeInteger(pid) || pid <= 0 || pid === process.pid) throw new Error("Invalid launch parent process id");
+    delete process.env.CODEXDC_LAUNCH_PARENT;
+    await waitForProcessExit(pid, { timeoutMs: 30_000 });
+  }
   const next = await maintainBeforeLaunch(process.env.CODEXDC_LAUNCH_CHECKED !== "1");
   if (next) {
     execFileSync(join(next, "node", process.platform === "win32" ? "node.exe" : "node"),
@@ -29,6 +37,10 @@ export async function launchManaged(): Promise<void> {
   if (!Array.isArray(args) || !args.every((arg) => typeof arg === "string")) throw new Error("Invalid desktop launch arguments");
   delete env.CODEXDC_DESKTOP_ARGS;
   delete env.CODEXDC_LAUNCH_CHECKED;
+  if (process.platform === "darwin") {
+    launchMacDesktop(state.appRoot, args, env);
+    return;
+  }
   const child = spawn(executable, args, { env, cwd: dirname(executable), detached: true, stdio: "ignore" });
   await new Promise<void>((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
   child.unref();

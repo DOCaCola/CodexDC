@@ -28,6 +28,32 @@ const userRoot = meta.userRoot;
 const appUserModelId = meta.appUserModelId;
 const MAX_LOG_BYTES = 10 * 1024 * 1024;
 
+// Keep the desktop as the bundle executable for macOS privacy attribution.
+// Maintenance waits for this first host to exit before refreshing the app.
+if (process.platform === "darwin" && process.env.CODEXDC_DESKTOP_READY !== "1") {
+  const launch = JSON.parse(fs.readFileSync(path.join(process.resourcesPath, "codexdc-launch.json"), "utf8"));
+  const child = require("node:child_process").spawn(launch.maintenanceNode, [launch.maintenanceCli, "launch"], {
+    detached: true,
+    stdio: "ignore",
+    env: {
+      ...process.env,
+      CODEXDC_HOME: userRoot,
+      CODEXDC_LAUNCH_PARENT: String(process.pid),
+      CODEXDC_DESKTOP_ARGS: JSON.stringify(process.argv.slice(1)),
+    },
+  });
+  child.once("error", (error) => {
+    process.stderr.write(`[codexdc] Could not start launch maintenance: ${error.message}\n`);
+    process.exit(1);
+  });
+  child.once("spawn", () => {
+    child.unref();
+    process.exit(0);
+  });
+  return;
+}
+delete process.env.CODEXDC_DESKTOP_READY;
+
 function appendCappedLog(file, line) {
   const incoming = Buffer.from(line);
   if (incoming.byteLength >= MAX_LOG_BYTES) {
