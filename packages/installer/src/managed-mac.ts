@@ -12,10 +12,10 @@ import { locateCodex } from "./platform.js";
 import { readPlist, writePlist } from "./plist.js";
 import { ensureUserPaths } from "./paths.js";
 import { readState, writeState } from "./state.js";
+import { writeManagedMacExecutableIdentity } from "./mac-executable-identity.js";
 
 export const MANAGED_MAC_ID = "io.github.docacola.codexdc";
 function stagedSourceRoot(): string { return resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", ".."); }
-const assets = resolve(dirname(fileURLToPath(import.meta.url)), "..", "assets");
 
 export async function installManagedMac(opts: { app?: string; force?: boolean; quiet?: boolean } = {}): Promise<void> {
   const paths = ensureUserPaths();
@@ -33,8 +33,6 @@ export async function installManagedMac(opts: { app?: string; force?: boolean; q
   const destination = previous?.managedCopy ? previous.appRoot : join(homedir(), "Applications", "CodexDC.app");
   if (existsSync(destination) && !previous?.managedCopy) throw new Error(`${destination} already exists and is not owned by CodexDC.`);
   if (existsSync(destination) && isCodexRunning(destination)) throw new Error("Close CodexDC before refreshing its managed copy.");
-  const launcher = join(assets, "mac-launcher");
-  if (!existsSync(launcher)) throw new Error("The macOS release is missing its native launcher.");
   const identity = prepareCodeSigning({ useLocalIdentity: true, identityName: "CodexDC Local Signing" });
   const lockPath = join(paths.root, "managed-install.lock");
   const lock = openSync(lockPath, "wx");
@@ -54,17 +52,16 @@ export async function installManagedMac(opts: { app?: string; force?: boolean; q
     const infoPath = join(stage, "Contents", "Info.plist");
     const info = readPlist(infoPath);
     const executable = String(info.CFBundleExecutable);
-    const original = `${executable}-original`;
-    renameSync(join(stage, "Contents", "MacOS", executable), join(stage, "Contents", "MacOS", original));
-    cpSync(launcher, join(stage, "Contents", "MacOS", executable));
+    writeManagedMacExecutableIdentity(join(stage, "Contents", "MacOS", executable), MANAGED_MAC_ID);
     info.CFBundleIdentifier = MANAGED_MAC_ID;
     info.CFBundleName = "CodexDC";
     info.CFBundleDisplayName = "CodexDC";
+    info.NSLocalNetworkUsageDescription = "CodexDC connects to model providers, development servers, and tools you configure on your local network.";
     info.SUEnableAutomaticChecks = false;
     info.SUAllowsAutomaticUpdates = false;
     writePlist(infoPath, info);
     writeFileSync(join(stage, "Contents", "Resources", "codexdc-launch.json"), JSON.stringify({
-      originalExecutable: original, userRoot: paths.root, maintenanceNode: process.execPath,
+      originalExecutable: executable, userRoot: paths.root, maintenanceNode: process.execPath,
       maintenanceCli: join(stagedSourceRoot(), "packages", "installer", "dist", "cli.js"),
     }));
     await install({ app: stage, resign: false, quiet: opts.quiet });

@@ -23,7 +23,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/build-launcher.mjs && npm run copy-assets",
+    "build": "tsc -p tsconfig.json && npm run copy-assets",
     "copy-assets": "node ./scripts/copy-assets.mjs",
     "dev": "tsx src/cli.ts"
   },

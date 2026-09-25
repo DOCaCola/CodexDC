@@ -3,7 +3,7 @@
 ## Automated pipeline
 
 Pushes to `main` build and test Windows x64 and macOS Apple Silicon packages.
-The macOS job compiles the native launcher and bridge on an Apple Silicon runner.
+The macOS job compiles the native bridge on an Apple Silicon runner.
 Each package bundles a pinned, checksum-verified Node distribution. No official
 Codex application files are uploaded.
 

@@ -48,7 +48,7 @@ test("inferCodexChannel detects stable and beta metadata", () => {
   assert.equal(inferCodexChannel(null, "ChatGPT"), "stable");
 });
 
-test("managed macOS process detection follows the desktop executable behind the launcher", (t) => {
+test("managed macOS process detection follows the native desktop executable", (t) => {
   const root = mkdtempSync(join(tmpdir(), "codexdc-mac-process-"));
   t.mock.method(os, "platform", () => "darwin");
   syncBuiltinESMExports();
@@ -63,13 +63,12 @@ test("managed macOS process detection follows the desktop executable behind the 
       CFBundleIdentifier: "io.github.docacola.codexdc",
       CFBundleExecutable: "Codex",
     });
-    writeFileSync(join(resources, "codexdc-launch.json"), JSON.stringify({ originalExecutable: "Codex-original" }));
+    writeFileSync(join(resources, "codexdc-launch.json"), JSON.stringify({ originalExecutable: "Codex" }));
     writeFileSync(join(executables, "Codex"), "");
-    writeFileSync(join(executables, "Codex-original"), "");
     const codex = locateCodex(app);
-    assert.equal(codex.executable, join(executables, "Codex-original"));
+    assert.equal(codex.executable, join(executables, "Codex"));
     assert.equal(matchesCodexMainExecutable(codex, `${codex.executable} --some-option`), true);
-    assert.equal(matchesCodexMainExecutable(codex, join(executables, "Codex")), false);
+    assert.equal(matchesCodexMainExecutable(codex, join(executables, "Codex")), true);
     assert.equal(matchesCodexMainExecutable(codex, `${codex.executable}-helper`), false);
   } finally {
     t.mock.restoreAll();
