@@ -1,9 +1,10 @@
 const STYLE_ID = "codexdc-header-branding";
 
-// The current product-mode caption is an SVG wordmark inside a flex span.
-// Add the suffix to that same flex row while leaving the menu and accessible label intact.
+// Product captions may be text or SVG wordmarks. Select one layout per trigger.
+// Decorate the caption without changing React content or the menu label.
 export const HEADER_BRANDING_CSS = `
-[aria-haspopup="menu"][aria-label^="Switch mode, current mode:"] span:has(> svg[data-no-autosize])::after {
+[aria-haspopup="menu"][aria-label^="Switch mode, current mode:"]:has(svg[data-no-autosize]) span:has(> svg[data-no-autosize])::after,
+[aria-haspopup="menu"][aria-label^="Switch mode, current mode:"]:not(:has(svg[data-no-autosize])) span.truncate::after {
   content: "DC";
   flex: none;
   margin-inline-start: 0.35em;
