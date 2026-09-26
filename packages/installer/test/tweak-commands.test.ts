@@ -6,6 +6,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -157,6 +158,22 @@ test("devTweak replaces an existing dev link when requested", async () => {
       const link = join(envRoot, "tweaks", "com.example.replace-first");
       assert.equal(existsSync(join(link, "manifest.json")), true);
       assert.match(readFileSync(join(link, "manifest.json"), "utf8"), /replace-second/);
+    });
+  });
+});
+
+test("devTweak replaces a dangling link after its source moves", async () => {
+  await withTempEnvAsync(async (envRoot) => {
+    await withTempDirAsync(async (root) => {
+      const source = join(root, "moved");
+      withSilencedConsole(() => createTweak(source, { repo: "example/moved" }));
+      const link = join(envRoot, "tweaks", "com.example.moved");
+      mkdirSync(join(envRoot, "tweaks"), { recursive: true });
+      symlinkSync(join(root, "old-location"), link, process.platform === "win32" ? "junction" : "dir");
+
+      await withSilencedConsoleAsync(() => devTweak(source, { replace: true, watch: false }));
+
+      assert.equal(existsSync(join(link, "manifest.json")), true);
     });
   });
 });

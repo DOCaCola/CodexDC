@@ -781,7 +781,7 @@ function escapePowerShellSingleQuotedString(value: string): string {
   return value.replace(/'/g, "''");
 }
 
-function installWindowsManagedAppLauncher(codex: CodexInstall): { shortcutPaths: string[] } | null {
+export function installWindowsManagedAppLauncher(codex: CodexInstall): { shortcutPaths: string[] } | null {
   if (codex.platform !== "win32") return null;
   if (!/\\codex-dc\\store-apps\\/i.test(`${codex.appRoot.replace(/\//g, "\\")}\\`)) {
     return null;

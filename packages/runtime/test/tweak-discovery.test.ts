@@ -3,6 +3,7 @@ import {
   mkdirSync,
   mkdtempSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,6 +14,16 @@ import { discoverTweaks } from "../src/tweak-discovery";
 test("discoverTweaks returns an empty list when the tweaks directory is missing", () => {
   withTempDir((root) => {
     assert.deepEqual(discoverTweaks(join(root, "missing")), []);
+  });
+});
+
+test("discoverTweaks skips a dangling link and loads other tweaks", () => {
+  withTempDir((root) => {
+    symlinkSync(join(root, "old-location"), join(root, "moved"), process.platform === "win32" ? "junction" : "dir");
+    const valid = writeTweak(root, "valid", validManifest("com.example.valid"));
+    writeFileSync(join(valid, "index.js"), "module.exports = {};");
+
+    assert.deepEqual(discoverTweaks(root).map((t) => t.manifest.id), ["com.example.valid"]);
   });
 });
 
