@@ -1495,7 +1495,7 @@ function renderTweakStorePage(
     updateStoreUpdateBadge(null);
     grid.textContent = "";
     renderTweakStoreGhostGrid(grid);
-    refreshTweakStoreGrid(grid, source, refreshBtn, true);
+    refreshTweakStoreGrid(grid, source, refreshBtn);
   });
   actions.appendChild(refreshBtn);
   actions.appendChild(storeToolbarButton("Publish Tweak", openPublishTweakDialog, "primary"));
@@ -1522,9 +1522,8 @@ function refreshTweakStoreGrid(
   grid: HTMLElement,
   source: HTMLElement,
   refreshBtn?: HTMLButtonElement,
-  force = false,
 ): void {
-  void getTweakStore(force)
+  void getTweakStore(true)
     .then((store) => {
       grid.dataset.codexppStore = JSON.stringify(store);
       renderTweakStoreGrid(grid, source);
@@ -1653,7 +1652,7 @@ function tweakStoreCard(entry: TweakStoreEntryView): HTMLElement {
           updateStoreUpdateBadge(Math.max(0, currentStoreUpdateBadgeCount() - 1));
           setTimeout(() => {
             actions.replaceChildren(storeStatusPill("Installed"));
-            if (grid && source) refreshTweakStoreGrid(grid, source, undefined, true);
+            if (grid && source) refreshTweakStoreGrid(grid, source);
           }, 900);
         })
         .catch((e) => {
