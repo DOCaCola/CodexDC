@@ -14,6 +14,7 @@ import {
   writeSync,
 } from "node:fs";
 import { readPlist, writePlist } from "./plist.js";
+import { prepareMacIntegrityDigest } from "./mac-integrity.js";
 import type { CodexInstall } from "./platform.js";
 
 export interface IntegrityEntry {
@@ -55,6 +56,7 @@ export function getIntegrity(install: CodexInstall): IntegrityEntry | null {
       | Record<string, IntegrityEntry>
       | undefined;
     if (!block) return null;
+    prepareMacIntegrityDigest(install.appRoot, block);
     return block["Resources/app.asar"] ?? null;
   }
   if (install.platform === "win32") {
@@ -72,9 +74,11 @@ export function setIntegrity(
     const pl = readPlist(install.metaPath);
     const existing =
       (pl["ElectronAsarIntegrity"] as Record<string, IntegrityEntry>) ?? {};
+    const updateDigest = prepareMacIntegrityDigest(install.appRoot, existing);
     const previousHash = existing["Resources/app.asar"]?.hash ?? hash;
     existing["Resources/app.asar"] = { algorithm: "SHA256", hash };
     pl["ElectronAsarIntegrity"] = existing;
+    updateDigest?.(existing);
     writePlist(install.metaPath, pl);
     return {
       algorithm: "SHA256",
