@@ -32,7 +32,9 @@ test("macOS release archive installs as a complete backend; a rejected update re
     latestRelease: async () => release,
     downloadReleaseAsset: async (_repo: string, asset: ReleaseAsset) =>
       asset.name === name ? bytes : Buffer.from(`${digest}  ${name}\n`),
-    probeBackend: async (executable: string) => {
+    probeBackend: async (executable: string, probeRoot?: string) => {
+      assert.equal(probeRoot, root);
+      assert.equal(executable, join(root, "cli", `${release.id}-darwin-arm64-${digest.slice(0, 12)}`, "bin", "codex"));
       for (const file of files) assert.ok(existsSync(join(dirname(dirname(executable)), file)));
       return "codex-cli 0.157.1-doca";
     },
@@ -41,9 +43,19 @@ test("macOS release archive installs as a complete backend; a rejected update re
   assert.match(installed.installed!.executable, /darwin-arm64/);
   assert.equal(installed.installed!.digest, digest);
   assert.ok(existsSync(installed.installed!.executable));
+  assert.deepEqual(await installBackend(root, undefined, services), installed, "an existing candidate is probed at its final path");
   release.id = 2;
   services.probeBackend = async () => { throw new Error("app-server rejected initialization"); };
   await assert.rejects(installBackend(root, undefined, services), /rejected initialization/);
   assert.deepEqual(backendState(root), installed);
   assert.equal(existsSync(join(root, "backend-install.lock")), false);
+  const rejected = join(root, "cli", `2-darwin-arm64-${digest.slice(0, 12)}`, "bin", "codex");
+  assert.ok(existsSync(rejected), "failed startup does not delete a potentially locked executable");
+  services.probeBackend = async (executable: string) => {
+    assert.equal(executable, rejected);
+    return "codex-cli 0.157.1-doca";
+  };
+  const retried = await installBackend(root, undefined, services);
+  assert.equal(retried.installed!.executable, rejected);
+  assert.deepEqual(retried.previous, installed.installed);
 });
