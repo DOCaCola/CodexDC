@@ -1,7 +1,6 @@
 import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { userPaths } from "./paths.js";
 import { CODEXDC_VERSION } from "./version.js";
@@ -101,7 +100,7 @@ export async function configureDevelopmentBackend(
 ): Promise<BackendState> {
   if (!executable.trim()) throw new Error("Specify the local CLI executable path.");
   const path = resolve(executable);
-  const version = await probe(path);
+  const version = await probe(path, root);
   save({ ...backendState(root), provider: "development", development: { executable: path, version } }, root);
   return backendState(root);
 }
@@ -143,8 +142,12 @@ export function validateBackendPackage(root: string, platform = process.platform
 }
 
 /** Checks app-server startup in a disposable home; never starts a user task. */
-export async function probeBackend(executable: string): Promise<string> {
-  const home = mkdtempSync(join(tmpdir(), "codexdc-cli-probe-"));
+export async function probeBackend(executable: string, root = userPaths().root): Promise<string> {
+  // The CLI refuses helper aliases when CODEX_HOME is inside the system temp
+  // directory. Keep the probe isolated from user sessions in our own data root.
+  const probes = join(root, "cli-probes");
+  mkdirSync(probes, { recursive: true });
+  const home = mkdtempSync(join(probes, "probe-"));
   const env = { ...process.env, CODEX_HOME: home };
   try {
     const version = execFileSync(executable, ["--version"], { env, encoding: "utf8", timeout: 15_000, windowsHide: true }).trim();
@@ -207,9 +210,13 @@ export async function installBackend(root = userPaths().root, candidate?: Releas
     const unpacked = join(work, "package");
     await extractPackage(archive, unpacked);
     const relativeExe = join("bin", services.platform === "win32" ? "codex.exe" : "codex");
-    const version = await services.probeBackend(validateBackendPackage(unpacked, services.platform));
+    validateBackendPackage(unpacked, services.platform);
     const destination = join(root, "cli", `${release.id}-${services.platform}-${services.arch}-${digest.slice(0, 12)}`);
+    // Never execute a Windows binary from a directory that still needs to move.
+    // A failed probe leaves an unselected, checksum-verified candidate here;
+    // retries validate and probe that same final path before changing selection.
     if (!existsSync(destination)) renameSync(unpacked, destination);
+    const version = await services.probeBackend(validateBackendPackage(destination, services.platform), root);
     const state = backendState(root);
     const installed = { tag: release.tag_name, releaseId: release.id, version, executable: join(destination, relativeExe), digest };
     save({ ...state, installed, previous: state.installed?.executable === installed.executable ? state.previous : state.installed }, root);
