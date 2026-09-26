@@ -13,6 +13,7 @@ function fixture() {
     isRunning: () => false,
     update: async (): Promise<string | undefined> => { calls.push("update"); return undefined; },
     repair: async (force: boolean) => { calls.push(`repair:${force}`); },
+    updateBackend: async () => { calls.push("backend"); },
     report: (error: unknown) => { calls.push(`report:${String(error)}`); },
   };
   return { calls, state, services };
@@ -21,7 +22,7 @@ function fixture() {
 test("launch checks for updates before refreshing the managed desktop", async () => {
   const f = fixture();
   await maintainBeforeLaunch(true, f.services);
-  assert.deepEqual(f.calls, ["update", "repair:false"]);
+  assert.deepEqual(f.calls, ["update", "repair:false", "backend"]);
 });
 
 test("opening an already-running desktop does not update or repair it", async () => {
@@ -42,14 +43,14 @@ test("the new package completes launch without checking for another update", asy
   const f = fixture();
   f.state.version = "0.0.1";
   await maintainBeforeLaunch(false, f.services);
-  assert.deepEqual(f.calls, ["repair:true"]);
+  assert.deepEqual(f.calls, ["repair:true", "backend"]);
 });
 
 test("download failure is reported and still allows the installed copy to be prepared", async () => {
   const f = fixture();
   f.services.update = async () => { throw new Error("offline"); };
   await maintainBeforeLaunch(true, f.services);
-  assert.deepEqual(f.calls, ["report:Error: offline", "repair:false"]);
+  assert.deepEqual(f.calls, ["report:Error: offline", "repair:false", "backend"]);
 });
 
 test("failed recovery stops launch instead of opening an uncertain installation", async () => {

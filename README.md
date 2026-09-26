@@ -53,6 +53,15 @@ Setup also prepares it by default. Existing saved selections take precedence; on
 setup an explicit `CODEX_CLI_PATH` override is validated and saved as **Local path**.
 The normal system PATH is not used to guess a backend.
 
+Enable **Automatically update the DC fork before launch** in the CLI settings to
+check stable releases at most once per hour, on Windows x64 or macOS Apple Silicon.
+It is off by default and only applies when the DC fork is selected. Downloads are
+checksum-verified and the complete package must pass app-server initialization
+before activation. Failed updates are reported and keep the installed backend.
+Running desktops are never restarted for an update. Rollback turns auto-update
+off to retain the restored version. CLI equivalent:
+`codexdc backend auto-update on` (or `off`).
+
 Use **Install / update DC fork** to refresh a downloaded release. Quit and reopen Codex-DC after
 finishing active tasks. Settings shows the running path separately from the saved
 selection. You can explicitly switch back or select the previous fork version.

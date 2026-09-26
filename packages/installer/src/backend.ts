@@ -11,6 +11,8 @@ export const CLI_REPO = "DOCaCola/codex";
 export interface BackendPackage { tag: string; releaseId: number; version: string; executable: string; digest: string }
 export interface BackendState {
   provider: "bundled" | "fork" | "development";
+  autoUpdate?: boolean;
+  updateCheck?: { checkedAt: string; error?: string };
   installed?: BackendPackage;
   previous?: BackendPackage;
   development?: { executable: string; version: string };
@@ -29,6 +31,12 @@ function save(state: BackendState, root: string): void {
   const temp = join(root, `backend-${randomUUID()}.tmp`);
   writeFileSync(temp, JSON.stringify(state, null, 2));
   renameSync(temp, join(root, "backend.json"));
+}
+
+export function setBackendAutoUpdate(enabled: boolean, root = userPaths().root): BackendState {
+  const state = backendState(root);
+  save({ ...state, autoUpdate: enabled, updateCheck: undefined }, root);
+  return backendState(root);
 }
 
 export function backendEnvironment(state: BackendState, inherited: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -101,7 +109,7 @@ export async function configureDevelopmentBackend(
 export function rollbackBackend(root = userPaths().root): BackendState {
   const state = backendState(root);
   if (!state.previous || !existsSync(state.previous.executable)) throw new Error("No previous DC fork package is available");
-  save({ ...state, installed: state.previous, previous: state.installed }, root);
+  save({ ...state, installed: state.previous, previous: state.installed, autoUpdate: false }, root);
   return backendState(root);
 }
 
@@ -178,27 +186,29 @@ export async function probeBackend(executable: string): Promise<string> {
   } finally { rmSync(home, { recursive: true, force: true }); }
 }
 
-export async function installBackend(root = userPaths().root): Promise<BackendState> {
+const installServices = { latestRelease, downloadReleaseAsset, probeBackend, platform: process.platform, arch: process.arch };
+
+export async function installBackend(root = userPaths().root, candidate?: Release, services = installServices): Promise<BackendState> {
   mkdirSync(root, { recursive: true });
   const lockPath = join(root, "backend-install.lock");
   let lock: number;
   try { lock = openSync(lockPath, "wx"); } catch { throw new Error("Another CLI installation is active. Retry when it finishes."); }
   const work = join(root, "cli", `.staging-${randomUUID()}`);
   try {
-    const release: Release = await latestRelease(CLI_REPO);
-    const asset = releaseAsset(release, backendAssetName(process.platform, process.arch));
-    const sums = await downloadReleaseAsset(CLI_REPO, releaseAsset(release, "SHA256SUMS"));
+    const release: Release = candidate ?? await services.latestRelease(CLI_REPO);
+    const asset = releaseAsset(release, backendAssetName(services.platform, services.arch));
+    const sums = await services.downloadReleaseAsset(CLI_REPO, releaseAsset(release, "SHA256SUMS"));
     const digest = expectedChecksum(sums.toString("utf8"), asset.name);
-    const bytes = await downloadReleaseAsset(CLI_REPO, asset);
+    const bytes = await services.downloadReleaseAsset(CLI_REPO, asset);
     verifyChecksum(bytes, digest);
     mkdirSync(work, { recursive: true });
     const archive = join(work, asset.name);
     writeFileSync(archive, bytes);
     const unpacked = join(work, "package");
     await extractPackage(archive, unpacked);
-    const relativeExe = join("bin", process.platform === "win32" ? "codex.exe" : "codex");
-    const version = await probeBackend(validateBackendPackage(unpacked));
-    const destination = join(root, "cli", `${release.id}-${process.platform}-${process.arch}-${digest.slice(0, 12)}`);
+    const relativeExe = join("bin", services.platform === "win32" ? "codex.exe" : "codex");
+    const version = await services.probeBackend(validateBackendPackage(unpacked, services.platform));
+    const destination = join(root, "cli", `${release.id}-${services.platform}-${services.arch}-${digest.slice(0, 12)}`);
     if (!existsSync(destination)) renameSync(unpacked, destination);
     const state = backendState(root);
     const installed = { tag: release.tag_name, releaseId: release.id, version, executable: join(destination, relativeExe), digest };

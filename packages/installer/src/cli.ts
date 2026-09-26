@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { findSourceRoot } from "./source-root.js";
 import { forwardToActivePackage } from "./active-package.js";
 import { manager } from "./commands/manager.js";
-import { backendState, checkBackend, installBackend, selectAvailableBackend, rollbackBackend, configureDevelopmentBackend } from "./backend.js";
+import { backendState, checkBackend, installBackend, selectAvailableBackend, rollbackBackend, configureDevelopmentBackend, setBackendAutoUpdate } from "./backend.js";
 import { launchManaged } from "./launch.js";
 import { installManagedMac, uninstallManagedMac } from "./managed-mac.js";
 import kleur from "kleur";
@@ -234,7 +234,7 @@ prog
 
 prog.command("setup").describe("Open guided setup and maintenance").action(wrap(manager));
 prog.command("launch").describe("Launch CodexDC with its selected CLI backend").action(wrap(launchManaged));
-prog.command("backend <action> [provider]").describe("CLI backend: status, check, install, select bundled|fork|development, develop <executable>, rollback")
+prog.command("backend <action> [provider]").describe("CLI backend: status, check, install, select bundled|fork|development, develop <executable>, rollback, auto-update on|off")
   .action(wrap(async (action: string, provider?: string) => {
     let result: unknown;
     switch (action) {
@@ -244,6 +244,10 @@ prog.command("backend <action> [provider]").describe("CLI backend: status, check
       case "select": result = await selectAvailableBackend(provider ?? ""); break;
       case "develop": result = await configureDevelopmentBackend(provider ?? ""); break;
       case "rollback": result = rollbackBackend(); break;
+      case "auto-update":
+        if (provider !== "on" && provider !== "off") throw new Error("Use auto-update on|off");
+        result = setBackendAutoUpdate(provider === "on");
+        break;
       default: throw new Error("Unknown backend action");
     }
     console.log(JSON.stringify(result));

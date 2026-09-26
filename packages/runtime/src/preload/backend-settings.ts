@@ -24,6 +24,13 @@ export function renderBackendSettings(root: HTMLElement): void {
     provider.append(option);
   }
   providerLabel.append(provider);
+  const updateLabel = document.createElement("label");
+  const autoUpdate = document.createElement("input");
+  autoUpdate.type = "checkbox";
+  updateLabel.append(autoUpdate, " Automatically update the DC fork before launch");
+  const updateHelp = document.createElement("p");
+  updateHelp.className = "text-secondary";
+  updateHelp.textContent = "Checks at most once per hour when the DC fork is selected. Running sessions are not restarted. Rollback turns automatic updates off.";
 
   const local = document.createElement("div");
   const pathLabel = document.createElement("label");
@@ -46,10 +53,12 @@ export function renderBackendSettings(root: HTMLElement): void {
   const refresh = async () => {
     const state = await ipcRenderer.invoke("codexdc:backend", "status");
     provider.value = state.provider;
+    autoUpdate.checked = state.autoUpdate === true;
     path.value = state.development?.executable ?? "";
     status.textContent = `Saved: ${state.provider === "development" ? "Local path" : state.provider === "fork" ? "DC fork" : "Desktop bundled (stock)"}. ` +
       `Installed DC fork: ${state.installed?.version ?? "none"}. ` +
       `Running: ${state.activeExecutable ?? "desktop bundled"}.`;
+    if (state.updateCheck?.error) status.textContent += ` Last CLI update failed: ${state.updateCheck.error}`;
     showLocal();
   };
   const setBusy = (busy: boolean) => {
@@ -82,6 +91,17 @@ export function renderBackendSettings(root: HTMLElement): void {
     browse.hidden = local.hidden;
   };
   provider.addEventListener("change", showLocal);
+  autoUpdate.addEventListener("change", async () => {
+    setBusy(true);
+    try {
+      await ipcRenderer.invoke("codexdc:backend", "auto-update", autoUpdate.checked ? "on" : "off");
+      output.textContent = "CLI update preference saved.";
+    } catch (error) { output.textContent = String(error); }
+    finally {
+      try { await refresh(); } catch (error) { output.textContent = String(error); }
+      setBusy(false);
+    }
+  });
   add("Save CLI selection", async () => {
     if (provider.value === "development") {
       await ipcRenderer.invoke("codexdc:backend", "develop", path.value.trim());
@@ -107,7 +127,7 @@ export function renderBackendSettings(root: HTMLElement): void {
     await refresh();
     return "Previous DC fork version restored. Quit and reopen Codex-DC to apply.";
   });
-  root.append(status, providerLabel, local, notice, controls, output);
+  root.append(status, providerLabel, local, updateLabel, updateHelp, notice, controls, output);
   showLocal();
   setBusy(true);
   void refresh().catch((error) => { output.textContent = String(error); }).finally(() => setBusy(false));
