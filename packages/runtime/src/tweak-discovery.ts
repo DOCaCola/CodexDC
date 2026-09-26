@@ -24,6 +24,7 @@ export function discoverTweaks(tweaksDir: string): DiscoveredTweak[] {
   const out: DiscoveredTweak[] = [];
   for (const name of readdirSync(tweaksDir)) {
     const dir = join(tweaksDir, name);
+    if (!existsSync(dir)) continue;
     if (!statSync(dir).isDirectory()) continue;
     const manifestPath = join(dir, "manifest.json");
     if (!existsSync(manifestPath)) continue;

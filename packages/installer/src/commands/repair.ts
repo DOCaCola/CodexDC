@@ -3,7 +3,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { platform } from "node:os";
 import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { install, readCodexVersion, stageAssets } from "./install.js";
+import { install, installWindowsManagedAppLauncher, readCodexVersion, stageAssets } from "./install.js";
 import { ensureUserPaths } from "../paths.js";
 import { readState, writeState } from "../state.js";
 import { locateCodex } from "../platform.js";
@@ -24,6 +24,7 @@ import {
 import { fileURLToPath } from "node:url";
 import { removeWindowsStoreMirror } from "../windows-store-mirror-retention.js";
 import { getIntegrity } from "../integrity.js";
+import { installCliShims } from "../cli-shim.js";
 
 interface Opts {
   app?: string;
@@ -112,6 +113,7 @@ export async function repair(opts: Opts = {}): Promise<void> {
       const codexVersion = readCodexVersion(codex.metaPath);
       if (codexVersion === updateMode.codexVersion && isUpdateModeFresh(updateMode)) {
         writeState(paths.stateFile, { ...state, sourceRoot });
+        if (!managedAppRootChanged) refreshEntrypoints(paths.binDir, targetCodex);
         if (!updateMode.notifiedAt) {
           showUpdateModePausedAlert(codex.appRoot, codexVersion);
           writeUpdateMode(paths.updateModeFile, {
@@ -145,6 +147,7 @@ export async function repair(opts: Opts = {}): Promise<void> {
         console.log(kleur.yellow(`Managed Codex path changed to ${codex.appRoot}; refreshing launcher and state.`));
       }
       const needsRuntimeRefresh = compareSemver(CODEXDC_VERSION, state.version) > 0;
+      if (!managedAppRootChanged) refreshEntrypoints(paths.binDir, codex);
       if (needsRuntimeRefresh) {
         if (!isAutoUpdateEnabled(paths.configFile)) {
           if (!opts.quiet) console.log(kleur.yellow("CodexDC auto-update is disabled."));
@@ -214,6 +217,11 @@ export async function repair(opts: Opts = {}): Promise<void> {
     promptRestartCodexAfterPatch(repairedAppRoot);
   }
   if (!opts.quiet) console.log(kleur.green("✓ Repair complete."));
+}
+
+function refreshEntrypoints(binDir: string, codex: ReturnType<typeof resolveManagedCodexInstall>): void {
+  installCliShims(binDir);
+  installWindowsManagedAppLauncher(codex);
 }
 
 function announceCodexUpdateDetected(updateModeFile: string, appRoot: string): void {

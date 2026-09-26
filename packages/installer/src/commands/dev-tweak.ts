@@ -5,8 +5,8 @@ import {
   mkdirSync,
   readFileSync,
   readlinkSync,
-  rmSync,
   symlinkSync,
+  unlinkSync,
   watch,
   writeFileSync,
 } from "node:fs";
@@ -79,8 +79,8 @@ function readValidManifest(manifestPath: string): TweakManifest {
 function ensureDevLink(sourceDir: string, linkPath: string, replace: boolean): void {
   mkdirSync(dirname(linkPath), { recursive: true });
 
-  if (existsSync(linkPath)) {
-    const stat = lstatSync(linkPath);
+  const stat = lstatSync(linkPath, { throwIfNoEntry: false });
+  if (stat) {
     if (stat.isSymbolicLink()) {
       const currentTarget = resolve(dirname(linkPath), readlinkSync(linkPath));
       if (currentTarget === sourceDir) return;
@@ -90,7 +90,7 @@ function ensureDevLink(sourceDir: string, linkPath: string, replace: boolean): v
             "Pass --replace to point it at this source directory.",
         );
       }
-      rmSync(linkPath, { recursive: true, force: true });
+      unlinkSync(linkPath);
     } else {
       throw new Error(`target tweak path already exists and is not a symlink: ${linkPath}`);
     }
