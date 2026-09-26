@@ -613,7 +613,8 @@ ipcMain.handle("codexdc:backend", async (_event, action: string, provider?: stri
     });
     return result.canceled ? null : result.filePaths[0];
   }
-  if (!["status", "check", "install", "select", "develop", "rollback"].includes(action)) throw new Error("Unknown backend action");
+  if (!["status", "check", "install", "select", "develop", "rollback", "auto-update"].includes(action)) throw new Error("Unknown backend action");
+  if (action === "auto-update" && !["on", "off"].includes(provider ?? "")) throw new Error("Unknown CLI update setting");
   if (action === "select" && !["bundled", "fork", "development"].includes(provider ?? "")) throw new Error("Unknown CLI provider");
   const result = JSON.parse(await runMaintenance("backend", [action, ...(provider ? [provider] : [])]));
   return action === "status" ? { ...result, activeExecutable: process.env.CODEX_CLI_PATH ?? null } : result;

@@ -6,12 +6,14 @@ import { isCodexRunning } from "./alerts.js";
 import { repair } from "./commands/repair.js";
 import { updatePackage, UpdateRecoveryError } from "./package-update.js";
 import { CODEXDC_VERSION } from "./version.js";
+import { updateBackendBeforeLaunch } from "./backend-update.js";
 
 const maintenance = {
   readInstall: () => readState(ensureUserPaths().stateFile),
   isRunning: isCodexRunning,
   update: () => updatePackage({ onLaunch: true, quiet: true }),
   repair: (force: boolean) => repair({ force, quiet: true }),
+  updateBackend: updateBackendBeforeLaunch,
   report: (error: unknown) => {
     const message = `Patcher update was not applied: ${String(error)}`;
     console.warn(message);
@@ -37,4 +39,5 @@ export async function maintainBeforeLaunch(
     }
   }
   await services.repair(state.version !== CODEXDC_VERSION);
+  await services.updateBackend();
 }
