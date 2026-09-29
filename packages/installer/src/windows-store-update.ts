@@ -14,8 +14,9 @@ const storeUpdateScript = resolve(
   here,
   "..",
   "assets",
-  "bundled-tweaks",
-  "windows-store-update-bridge",
+  "runtime",
+  "platform",
+  "windows",
   "store-update.ps1",
 );
 const STORE_UPDATE_TIMEOUT_MS = 15 * 60_000;

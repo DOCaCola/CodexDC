@@ -1,8 +1,82 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 
 const require = createRequire(import.meta.url);
+
+test("Store readiness clears independently of native update readiness", async () => {
+  let available = true;
+  let ready = false;
+  const manager = {
+    getIsUpdateReady: () => ready,
+    setUpdateReady: (value: boolean) => { ready = value; },
+    checkForUpdates: async () => {},
+    installUpdatesIfAvailable: async () => {},
+  };
+  const loaded = {
+    factory: Function(
+      "state",
+      "return function(){ /* sparkleManager setSparkleBridgeHandlers */ return state; }",
+    )({ sparkleManager: manager }),
+  };
+  const moduleLoader = { _load: () => loaded };
+  const fakeRequire = Object.assign((name: string) => {
+    if (name === "node:fs") return {
+      readFileSync: () => JSON.stringify({
+        appRoot: "C:\\store-apps\\OpenAI.Codex_1.0.0.0_x64__publisher\\app",
+      }),
+    };
+    if (name === "node:path") return path;
+    if (name === "node:module") return moduleLoader;
+    if (name === "electron") return { app: {}, dialog: {} };
+    if (name === "node:child_process") return {
+      execFile: (_file: string, args: string[], _options: unknown, callback: Function) => {
+        callback(null, args.includes("-File")
+          ? JSON.stringify({ available })
+          : JSON.stringify({ Version: "1.0.0.0", InstallLocation: "C:\\Store" }));
+      },
+    };
+    throw new Error(`Unexpected require: ${name}`);
+  }, { cache: { bootstrap: { filename: "bootstrap-test.js", exports: loaded } } });
+  const module = { exports: {} as { start(api: unknown): void; stop(): void } };
+  runInNewContext(
+    readFileSync(new URL("../../runtime/platform/windows/index.js", import.meta.url), "utf8"),
+    {
+      module, require: fakeRequire, __dirname: "C:\\runtime",
+      process: { platform: "win32", env: { CODEXDC_USER_ROOT: "C:\\CodexDC" } },
+      setImmediate: (callback: Function) => callback(),
+      setInterval: () => ({ unref() {} }), clearInterval() {},
+    },
+  );
+  module.exports.start({ log: { info() {}, warn() {} } });
+  try {
+    await manager.checkForUpdates();
+    assert.equal(ready, true);
+    available = false;
+    await manager.checkForUpdates();
+    assert.equal(manager.getIsUpdateReady(), false);
+    assert.equal(ready, false);
+
+    available = true;
+    await manager.checkForUpdates();
+    manager.setUpdateReady(true);
+    available = false;
+    await manager.checkForUpdates();
+    assert.equal(ready, true, "native update survives removal of the Store update");
+
+    available = true;
+    await manager.checkForUpdates();
+    manager.setUpdateReady(false);
+    assert.equal(ready, true, "Store update survives clearing the native update");
+  } finally {
+    module.exports.stop();
+  }
+  assert.equal(ready, false, "stopping removes the Store readiness overlay");
+});
+
 const bridge = require("../../runtime/platform/windows/index.js") as {
   __test: {
     compareVersions(left: string, right: string): number;

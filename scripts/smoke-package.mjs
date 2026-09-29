@@ -14,6 +14,26 @@ try {
   const options = { cwd: tmpdir(), encoding: "utf8", env: { ...process.env, CODEXDC_HOME: join(stage, "smoke-home") } };
   mkdirSync(options.env.CODEXDC_HOME, { recursive: true });
   execFileSync(node, [cli, "--help"], options);
+  // Exercise the updater from the extracted release, without requesting an update.
+  const storeUpdateModule = join(stage, "packages", "installer", "dist", "windows-store-update.js");
+  execFileSync(node, ["--input-type=module", "-e", `
+    import assert from "node:assert/strict";
+    import childProcess from "node:child_process";
+    import { readFileSync } from "node:fs";
+    import { syncBuiltinESMExports } from "node:module";
+    import { pathToFileURL } from "node:url";
+    childProcess.execFileSync = (file, args) => {
+      assert.equal(file, "powershell.exe");
+      const scriptIndex = args.indexOf("-File") + 1;
+      assert.ok(scriptIndex > 0);
+      assert.match(readFileSync(args[scriptIndex], "utf8"), /UpdateAppByPackageFamilyNameAsync/);
+      assert.deepEqual(args.slice(scriptIndex + 1), ["start", "OpenAI.Codex_2p2nqsd0c76g0"]);
+      return '{"queued":true}';
+    };
+    syncBuiltinESMExports();
+    const updater = await import(pathToFileURL(process.argv[1]).href);
+    assert.equal(updater.startStoreUpdate("OpenAI.Codex_2p2nqsd0c76g0"), true);
+  `, storeUpdateModule], options);
   assert.deepEqual(JSON.parse(execFileSync(node, [cli, "backend", "status"], options)), { provider: "fork" });
   const tweak = join(stage, "development tweak");
   mkdirSync(tweak);
