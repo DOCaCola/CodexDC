@@ -1,11 +1,39 @@
 import assert from "node:assert/strict";
+import childProcess from "node:child_process";
+import { readFileSync } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import test from "node:test";
 import {
   compareStoreVersions,
   isStorePackageReady,
   packageNameFromFamily,
+  startStoreUpdate,
   waitForNewStorePackage,
 } from "../src/windows-store-update";
+
+test("Store update invokes the shipped runtime PowerShell script", (t) => {
+  const family = "OpenAI.Codex_2p2nqsd0c76g0";
+  const source = readFileSync(
+    new URL("../../runtime/platform/windows/store-update.ps1", import.meta.url),
+    "utf8",
+  );
+  const invocation = t.mock.method(childProcess, "execFileSync", (file, args) => {
+    assert.equal(file, "powershell.exe");
+    const scriptIndex = args.indexOf("-File") + 1;
+    assert.ok(scriptIndex > 0);
+    assert.equal(readFileSync(args[scriptIndex], "utf8"), source);
+    assert.deepEqual(args.slice(scriptIndex + 1), ["start", family]);
+    return '{"queued":true}';
+  });
+  syncBuiltinESMExports();
+  try {
+    assert.equal(startStoreUpdate(family), true);
+    assert.equal(invocation.mock.callCount(), 1);
+  } finally {
+    invocation.mock.restore();
+    syncBuiltinESMExports();
+  }
+});
 
 test("Store update uses package family identity and numeric versions", () => {
   assert.equal(packageNameFromFamily("OpenAI.Codex_2p2nqsd0c76g0"), "OpenAI.Codex");

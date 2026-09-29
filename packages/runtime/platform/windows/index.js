@@ -223,6 +223,7 @@ function start(api) {
   let customUpdate = null;
   let refreshInFlight = null;
   let repairStarted = false;
+  let syncUpdateReady = null;
 
   const refreshStoreUpdate = async () => {
     if (refreshInFlight) return refreshInFlight;
@@ -238,8 +239,8 @@ function start(api) {
             ))
             ? { kind: "available" }
             : null;
+        syncUpdateReady?.();
         if (customUpdate && patchedManager) {
-          patchedManager.setUpdateReady(true);
           const detail = newer
             ? `${packageDetails.version} -> ${installed.version} is installed and ready for CodexDC repair`
             : `is available for ${packageDetails.packageFamily}`;
@@ -325,8 +326,13 @@ function start(api) {
     };
     Object.defineProperty(manager, PATCH_MARKER, { value: true, configurable: true });
 
-    manager.getIsUpdateReady = () => Boolean(customUpdate) || original.getIsUpdateReady();
-    manager.setUpdateReady = (ready) => original.setUpdateReady(customUpdate ? true : ready);
+    let nativeUpdateReady = original.getIsUpdateReady();
+    syncUpdateReady = () => original.setUpdateReady(Boolean(customUpdate) || nativeUpdateReady);
+    manager.getIsUpdateReady = () => Boolean(customUpdate) || nativeUpdateReady;
+    manager.setUpdateReady = (ready) => {
+      nativeUpdateReady = ready;
+      syncUpdateReady();
+    };
     manager.checkForUpdates = async (...args) => {
       await refreshStoreUpdate();
       if (customUpdate) return;
@@ -340,6 +346,8 @@ function start(api) {
 
     patchedManager = manager;
     restoreManager = () => {
+      syncUpdateReady = null;
+      original.setUpdateReady(nativeUpdateReady);
       manager.checkForUpdates = original.checkForUpdates;
       manager.getIsUpdateReady = original.getIsUpdateReady;
       manager.installUpdatesIfAvailable = original.installUpdatesIfAvailable;
