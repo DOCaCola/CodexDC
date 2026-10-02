@@ -44,6 +44,8 @@ interface TweakUpdateCheck {
 
 interface CodexPlusPlusConfig {
   version: string;
+  platform: NodeJS.Platform;
+  directoryOpus: boolean;
   autoUpdate: boolean;
   updateChannel: SelfUpdateChannel;
   updateRepo: string;
@@ -997,6 +999,14 @@ function renderConfigPage(
   section.appendChild(card);
   sectionsWrap.appendChild(section);
 
+  const integrations = document.createElement("section");
+  integrations.className = "flex flex-col gap-2";
+  integrations.style.display = "none";
+  integrations.appendChild(sectionTitle("Desktop Integration"));
+  const integrationsCard = roundedCard();
+  integrations.appendChild(integrationsCard);
+  sectionsWrap.appendChild(integrations);
+
   void ipcRenderer
     .invoke("codexpp:get-config")
     .then((config) => {
@@ -1005,6 +1015,10 @@ function renderConfigPage(
       }
       card.textContent = "";
       renderCodexPlusPlusConfig(card, config as CodexPlusPlusConfig);
+      if ((config as CodexPlusPlusConfig).platform === "win32") {
+        integrationsCard.appendChild(directoryOpusRow(config as CodexPlusPlusConfig));
+        integrations.style.display = "";
+      }
     })
     .catch((e) => {
       if (subtitle) subtitle.textContent = "Could not load installed Codex-DC version.";
@@ -1061,6 +1075,19 @@ function autoUpdateRow(config: CodexPlusPlusConfig): HTMLElement {
       await ipcRenderer.invoke("codexpp:set-auto-update", next);
     }),
   );
+  return row;
+}
+
+function directoryOpusRow(config: CodexPlusPlusConfig): HTMLElement {
+  const row = actionRow(
+    "Use Directory Opus",
+    "Open folders and reveal files in Directory Opus. Requires Directory Opus to be installed. Restart Codex-DC after changing this setting.",
+  );
+  const toggle = switchControl(config.directoryOpus, async (next) => {
+    await ipcRenderer.invoke("codexpp:set-directory-opus", next);
+  });
+  toggle.setAttribute("aria-label", "Use Directory Opus");
+  row.querySelector<HTMLElement>("[data-codexpp-row-actions]")?.appendChild(toggle);
   return row;
 }
 

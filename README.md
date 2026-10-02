@@ -101,8 +101,10 @@ CodexDC uses `%APPDATA%\codex-dc` on Windows and
 use `%LOCALAPPDATA%\codex-dc`. This is a fresh installation: there is no import,
 migration or fallback to the former `codexdc` or Codex++ directories.
 
-Directory Opus file reveal is optional: set `codexPlusPlus.directoryOpus` to
-`true` in `config.json` and restart. Internal `codexPlusPlus` and `codexpp`
+On Windows, enable **Settings → Codex-DC → Desktop Integration → Use Directory Opus**
+to open folders and reveal files in Directory Opus. Directory Opus must be installed;
+restart CodexDC after changing the setting. It is off by default and stored as
+`codexPlusPlus.directoryOpus` in `config.json`. Internal `codexPlusPlus` and `codexpp`
 identifiers are retained by the tweak API.
 
 ## Development

@@ -644,6 +644,8 @@ ipcMain.handle("codexpp:get-config", () => {
   const sourceRoot = installerState?.sourceRoot ?? null;
   return {
     version: CODEXDC_VERSION,
+    platform: process.platform,
+    directoryOpus: s.codexPlusPlus?.directoryOpus === true,
     autoUpdate: s.codexPlusPlus?.autoUpdate !== false,
     safeMode: s.codexPlusPlus?.safeMode === true,
     updateChannel: s.codexPlusPlus?.updateChannel ?? "stable",
@@ -658,6 +660,14 @@ ipcMain.handle("codexpp:get-config", () => {
 ipcMain.handle("codexpp:set-auto-update", (_e, enabled: boolean) => {
   setCodexPlusPlusAutoUpdate(!!enabled);
   return { autoUpdate: isCodexPlusPlusAutoUpdateEnabled() };
+});
+
+ipcMain.handle("codexpp:set-directory-opus", (_e, enabled: boolean) => {
+  const s = readState();
+  s.codexPlusPlus ??= {};
+  s.codexPlusPlus.directoryOpus = !!enabled;
+  writeState(s);
+  return { directoryOpus: readState().codexPlusPlus?.directoryOpus === true };
 });
 
 ipcMain.handle("codexpp:set-update-config", (_e, config: {
