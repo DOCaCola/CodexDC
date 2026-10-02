@@ -4,6 +4,8 @@ import { ipcRenderer } from "electron";
 export function renderBackendSettings(root: HTMLElement): void {
   root.className = "flex flex-col gap-3 p-3 text-sm text-default";
   const status = document.createElement("p");
+  const runningVersion = document.createElement("p");
+  runningVersion.textContent = "Running CLI version: Loading…";
   const notice = document.createElement("p");
   notice.className = "text-secondary";
   notice.textContent = "Changes apply after you quit and reopen Codex-DC. Finish active tasks first.";
@@ -59,6 +61,7 @@ export function renderBackendSettings(root: HTMLElement): void {
       `Installed DC fork: ${state.installed?.version ?? "none"}. ` +
       `Running: ${state.activeExecutable ?? "desktop bundled"}.`;
     if (state.updateCheck?.error) status.textContent += ` Last CLI update failed: ${state.updateCheck.error}`;
+    runningVersion.textContent = `Running CLI version: ${state.activeVersion ?? "Unavailable"}.`;
     showLocal();
   };
   const setBusy = (busy: boolean) => {
@@ -127,7 +130,7 @@ export function renderBackendSettings(root: HTMLElement): void {
     await refresh();
     return "Previous DC fork version restored. Quit and reopen Codex-DC to apply.";
   });
-  root.append(status, providerLabel, local, updateLabel, updateHelp, notice, controls, output);
+  root.append(status, runningVersion, providerLabel, local, updateLabel, updateHelp, notice, controls, output);
   showLocal();
   setBusy(true);
   void refresh().catch((error) => { output.textContent = String(error); }).finally(() => setBusy(false));
