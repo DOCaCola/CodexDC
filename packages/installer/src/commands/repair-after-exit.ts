@@ -55,7 +55,7 @@ export async function repairAfterExit(opts: RepairAfterExitOptions = {}): Promis
     if (storeFamily && storeVersion) {
       writeLog(`Requesting Windows Store update for ${storeFamily} after ${storeVersion}`);
       const installed = await installNewStorePackage(storeFamily, storeVersion, writeLog);
-      writeLog(`Windows Store installed ${storeFamily} ${installed.version}`);
+      writeLog(`Windows Store package ready: ${storeFamily} ${installed.version}`);
     }
     writeLog("Starting forced repair against the current Windows Store package");
     await repair({ force: true });

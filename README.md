@@ -64,7 +64,9 @@ off to retain the restored version. CLI equivalent:
 
 Use **Install / update DC fork** to refresh a downloaded release. Quit and reopen Codex-DC after
 finishing active tasks. Settings shows the running path separately from the saved
-selection. You can explicitly switch back or select the previous fork version.
+selection, along with the CLI version reported by the running backend at initialization.
+This version omits custom build suffixes such as `-doca`. You can explicitly switch
+back or select the previous fork version.
 The bundled executable and system PATH are not replaced.
 
 The Windows fork release includes hpatch, sandbox helpers, the code-mode host and

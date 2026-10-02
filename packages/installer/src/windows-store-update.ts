@@ -9,6 +9,12 @@ export interface StorePackage {
   installLocation: string;
 }
 
+export interface StoreInstallStatus {
+  state: string;
+  percentComplete: number;
+  errorCode: string;
+}
+
 const here = dirname(fileURLToPath(import.meta.url));
 const storeUpdateScript = resolve(
   here,
@@ -80,12 +86,29 @@ export function startStoreUpdate(family: string): boolean {
   return result.queued === true;
 }
 
+export function queryStoreInstallStatus(family: string): StoreInstallStatus | null {
+  packageNameFromFamily(family);
+  const output = execFileSync(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", storeUpdateScript, "status", family],
+    { encoding: "utf8", windowsHide: true, timeout: 15_000 },
+  );
+  return (JSON.parse(output) as { status: StoreInstallStatus | null }).status;
+}
+
 export function isStorePackageReady(
   installed: StorePackage | null,
   previousVersion: string,
   fileExists: (path: string) => boolean = existsSync,
 ): installed is StorePackage {
   if (!installed || compareStoreVersions(installed.version, previousVersion) <= 0) return false;
+  return hasStorePackageFiles(installed, fileExists);
+}
+
+function hasStorePackageFiles(
+  installed: StorePackage,
+  fileExists: (path: string) => boolean,
+): boolean {
   return (
     fileExists(join(installed.installLocation, "app", "resources", "app.asar")) ||
     fileExists(join(installed.installLocation, "resources", "app.asar"))
@@ -99,6 +122,7 @@ export async function waitForNewStorePackage(
     timeoutMs?: number;
     pollMs?: number;
     query?: (family: string) => StorePackage | null;
+    queryStatus?: (family: string) => StoreInstallStatus | null;
     fileExists?: (path: string) => boolean;
     pause?: (ms: number) => Promise<unknown>;
     onProgress?: (message: string) => void;
@@ -106,6 +130,7 @@ export async function waitForNewStorePackage(
   } = {},
 ): Promise<StorePackage> {
   const query = options.query ?? queryInstalledStorePackage;
+  const queryStatus = options.queryStatus ?? queryStoreInstallStatus;
   const fileExists = options.fileExists ?? existsSync;
   const pause = options.pause ?? delay;
   const timeoutMs = options.timeoutMs ?? STORE_UPDATE_TIMEOUT_MS;
@@ -120,7 +145,20 @@ export async function waitForNewStorePackage(
     const newerVersion = installed
       ? compareStoreVersions(installed.version, previousVersion) > 0
       : false;
-    if (isStorePackageReady(installed, previousVersion, fileExists)) return installed;
+    if (installed && newerVersion && hasStorePackageFiles(installed, fileExists)) return installed;
+    const status = queryStatus(family);
+    if (status?.state === "Error" || status?.state === "Canceled") {
+      throw new Error(`Windows Store update ${status.state.toLowerCase()} for ${family}${status.errorCode ? `: ${status.errorCode}` : ""}`);
+    }
+    if (
+      status?.state === "Completed" &&
+      installed &&
+      compareStoreVersions(installed.version, previousVersion) === 0 &&
+      hasStorePackageFiles(installed, fileExists)
+    ) {
+      options.onProgress?.(`Windows Store completed the request; ${installed.version} is already installed`);
+      return installed;
+    }
     const now = Date.now();
     if (
       options.onProgress &&
@@ -129,7 +167,9 @@ export async function waitForNewStorePackage(
     ) {
       const elapsed = Math.floor((now - startedAt) / 1_000);
       options.onProgress(
-        newerVersion
+        status && !newerVersion
+          ? `Windows Store ${status.state}: ${Math.floor(status.percentComplete)}%; installed version: ${observedVersion} (${elapsed}s)`
+          : newerVersion
           ? `Windows Store registered ${observedVersion}; waiting for app files (${elapsed}s)`
           : `Waiting for a newer Windows Store package; installed version: ${observedVersion} (${elapsed}s)`,
       );
