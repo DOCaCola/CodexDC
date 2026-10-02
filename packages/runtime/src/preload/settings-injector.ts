@@ -7,6 +7,19 @@
 
 import { ipcRenderer } from "electron";
 import { renderBackendSettings } from "./backend-settings";
+import {
+  metadataBadgeClass,
+  settingsActionsClass,
+  settingsDescriptionClass,
+  settingsInputClass,
+  settingsLabelClass,
+  settingsRow,
+  settingsRowClass,
+  settingsSelectClass,
+  settingsSwitch,
+  stockButton,
+  stockButtonClass,
+} from "./stock-settings-controls";
 import type {
   SettingsSection,
   SettingsPage,
@@ -769,15 +782,7 @@ function appendSidebarStoreUpdateBadge(btn: HTMLButtonElement): void {
   badge.dataset.codexppStoreUpdateBadge = "true";
   badge.hidden = true;
   badge.title = "Installed tweaks with approved updates";
-  badge.className = "inline-flex shrink-0 items-center justify-center";
-  Object.assign(badge.style, {
-    position: "absolute",
-    right: "12px",
-    top: "50%",
-    transform: "translateY(-50%)",
-    zIndex: "1",
-  });
-  applyStoreUpdateBadgeStyle(badge, null);
+  applyStoreUpdateBadgeStyle(badge);
   btn.appendChild(badge);
 }
 
@@ -1057,24 +1062,13 @@ function renderCodexPlusPlusConfig(card: HTMLElement, config: CodexPlusPlusConfi
 }
 
 function autoUpdateRow(config: CodexPlusPlusConfig): HTMLElement {
-  const row = document.createElement("div");
-  row.className = "flex items-center justify-between gap-4 p-3";
-  const left = document.createElement("div");
-  left.className = "flex min-w-0 flex-col gap-1";
-  const title = document.createElement("div");
-  title.className = "min-w-0 text-sm text-default";
-  title.textContent = "Update Codex-DC on launch";
-  const desc = document.createElement("div");
-  desc.className = "text-secondary min-w-0 text-sm";
-  desc.textContent = `Installed version v${config.version}. Checks for stable patcher updates when Codex-DC launches. No scheduled background tasks.`;
-  left.appendChild(title);
-  left.appendChild(desc);
-  row.appendChild(left);
-  row.appendChild(
-    switchControl(config.autoUpdate, async (next) => {
-      await ipcRenderer.invoke("codexpp:set-auto-update", next);
-    }),
+  const { row, actions } = settingsRow(
+    "Update Codex-DC on launch",
+    `Installed version v${config.version}. Checks for stable patcher updates when Codex-DC launches. No scheduled background tasks.`,
   );
+  actions.appendChild(settingsSwitch(config.autoUpdate, async (next) => {
+    await ipcRenderer.invoke("codexpp:set-auto-update", next);
+  }, "Update Codex-DC on launch"));
   return row;
 }
 
@@ -1096,7 +1090,7 @@ function updateChannelRow(config: CodexPlusPlusConfig): HTMLElement {
   const action = row.querySelector<HTMLElement>("[data-codexpp-row-actions]");
   const select = document.createElement("select");
   select.className =
-    "h-8 rounded-lg border border-default bg-transparent px-2 text-sm text-default focus:outline-none";
+    settingsSelectClass;
   for (const [value, label] of [
     ["stable", "Stable"],
     ["prerelease", "Prerelease"],
@@ -1141,30 +1135,19 @@ function installationSourceRow(source: InstallationSource): HTMLElement {
 }
 
 function selfUpdateStatusRow(state: SelfUpdateState | null): HTMLElement {
-  const row = rowSimple("Last Codex-DC update", selfUpdateSummary(state));
-  const left = row.firstElementChild as HTMLElement | null;
-  if (left && state) left.prepend(statusBadge(selfUpdateStatusTone(state.status), selfUpdateStatusLabel(state.status)));
+  const { row, actions } = settingsRow("Last Codex-DC update", selfUpdateSummary(state));
+  if (state) actions.appendChild(statusBadge(selfUpdateStatusTone(state.status), selfUpdateStatusLabel(state.status)));
   return row;
 }
 
 function checkForUpdatesRow(config: CodexPlusPlusConfig): HTMLElement {
   const check = config.updateCheck;
-  const row = document.createElement("div");
-  row.className = "flex items-center justify-between gap-4 p-3";
-  const left = document.createElement("div");
-  left.className = "flex min-w-0 flex-col gap-1";
-  const title = document.createElement("div");
-  title.className = "min-w-0 text-sm text-default";
-  title.textContent = check?.updateAvailable ? "Codex-DC update available" : "Check for Codex-DC updates";
-  const desc = document.createElement("div");
-  desc.className = "text-secondary min-w-0 text-sm";
-  desc.textContent = updateSummary(check);
-  left.appendChild(title);
-  left.appendChild(desc);
-  row.appendChild(left);
-
-  const actions = document.createElement("div");
-  actions.className = "flex shrink-0 items-center gap-2";
+  const { row, actions } = settingsRow(
+    check?.updateAvailable ? "Codex-DC update available" : "Check for Codex-DC updates",
+    updateSummary(check),
+  );
+  row.className = settingsRowClass + " max-sm:flex-col max-sm:items-stretch";
+  actions.classList.add("flex-wrap");
   if (check?.releaseUrl) {
     actions.appendChild(
       compactButton("Release Notes", () => {
@@ -1208,15 +1191,14 @@ function checkForUpdatesRow(config: CodexPlusPlusConfig): HTMLElement {
         });
     }),
   );
-  row.appendChild(actions);
   return row;
 }
 
 function releaseNotesRow(check: CodexPlusPlusUpdateCheck): HTMLElement {
   const row = document.createElement("div");
-  row.className = "flex flex-col gap-2 p-3";
+  row.className = "flex flex-col gap-2 px-4 py-3";
   const title = document.createElement("div");
-  title.className = "text-sm text-default";
+  title.className = settingsLabelClass;
   title.textContent = "Latest release notes";
   row.appendChild(title);
   const body = document.createElement("div");
@@ -1372,13 +1354,11 @@ function appendText(parent: HTMLElement, text: string): void {
 
 function statusBadge(status: "ok" | "warn" | "error", label?: string): HTMLElement {
   const badge = document.createElement("span");
-  const tone =
-    status === "ok"
-      ? "border-chart-green/30 text-chart-green"
-      : status === "warn"
-        ? "border-warning-outline text-chart-yellow"
-        : "border-chart-red/30 text-chart-red";
-  badge.className = `inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-xs font-medium ${tone}`;
+  badge.className = metadataBadgeClass;
+  if (status === "error") {
+    badge.classList.remove("text-secondary");
+    badge.classList.add("text-danger");
+  }
   badge.textContent = label || (status === "ok" ? "OK" : status === "warn" ? "Review" : "Error");
   return badge;
 }
@@ -1483,24 +1463,7 @@ function reportBugRow(): HTMLElement {
 }
 
 function actionRow(titleText: string, description: string): HTMLElement {
-  const row = document.createElement("div");
-  row.className = "flex items-center justify-between gap-4 p-3";
-  const left = document.createElement("div");
-  left.className = "flex min-w-0 flex-col gap-1";
-  const title = document.createElement("div");
-  title.className = "min-w-0 text-sm text-default";
-  title.textContent = titleText;
-  const desc = document.createElement("div");
-  desc.className = "text-secondary min-w-0 text-sm";
-  desc.textContent = description;
-  left.appendChild(title);
-  left.appendChild(desc);
-  row.appendChild(left);
-  const actions = document.createElement("div");
-  actions.dataset.codexppRowActions = "true";
-  actions.className = "flex shrink-0 items-center gap-2";
-  row.appendChild(actions);
-  return row;
+  return settingsRow(titleText, description).row;
 }
 
 function renderTweakStorePage(
@@ -1516,7 +1479,7 @@ function renderTweakStorePage(
   source.textContent = "Loading live registry";
 
   const actions = document.createElement("div");
-  actions.className = "flex shrink-0 items-center gap-2";
+  actions.className = settingsActionsClass;
   const refreshBtn = storeIconButton(refreshIconSvg(), "Refresh tweak store", () => {
     refreshBtn.disabled = true;
     updateStoreUpdateBadge(null);
@@ -1631,7 +1594,7 @@ function tweakStoreCard(entry: TweakStoreEntryView): HTMLElement {
 
   const titleRow = tweakStoreTitleRow();
   const title = document.createElement("div");
-  title.className = "min-w-0 text-lg font-semibold leading-7 text-default";
+  title.className = "min-w-0 break-words text-base font-medium text-default";
   title.textContent = entry.manifest.name;
   titleRow.appendChild(title);
   titleRow.appendChild(verifiedSafeBadge());
@@ -1673,7 +1636,7 @@ function tweakStoreCard(entry: TweakStoreEntryView): HTMLElement {
       void ipcRenderer
         .invoke("codexpp:install-store-tweak", entry.id)
         .then(() => {
-          showStoreToast(`${entry.manifest.name} installed.`);
+          showStoreCardMessage(card, `${entry.manifest.name} installed.`);
           showStoreButtonInstalled(button);
           versions.replaceChildren(tweakStoreVersionBadge(entry, entry.manifest.version));
           updateStoreUpdateBadge(Math.max(0, currentStoreUpdateBadgeCount() - 1));
@@ -1709,8 +1672,9 @@ function showStoreCardMessage(card: HTMLElement, message: string): void {
   card.querySelector("[data-codexpp-store-card-message]")?.remove();
   const notice = document.createElement("div");
   notice.dataset.codexppStoreCardMessage = "true";
+  notice.setAttribute("role", "status");
   notice.className =
-    "rounded-lg border border-subtle bg-text/5 px-3 py-2 text-sm leading-5 text-codex-description";
+    settingsDescriptionClass;
   notice.textContent = message;
   const actions = card.lastElementChild;
   if (actions) card.insertBefore(notice, actions);
@@ -1726,7 +1690,7 @@ function tweakStoreCardShell(): {
 } {
   const card = document.createElement("div");
   card.className =
-    "border-subtle flex min-h-[190px] flex-col justify-between gap-4 rounded-2xl border p-4 transition-colors hover:bg-text/5";
+    "border-default bg-surface-card flex flex-col gap-4 rounded-2xl border p-4";
 
   const left = document.createElement("div");
   left.className = "flex min-w-0 flex-1 items-start gap-3";
@@ -1750,7 +1714,7 @@ function tweakStoreCardShell(): {
 
 function tweakStoreTitleRow(): HTMLElement {
   const titleRow = document.createElement("div");
-  titleRow.className = "flex min-w-0 items-start justify-between gap-3";
+  titleRow.className = "flex min-w-0 flex-wrap items-center justify-between gap-2";
   return titleRow;
 }
 
@@ -1793,7 +1757,7 @@ function tweakStoreGhostCard(): HTMLElement {
 
   const titleRow = tweakStoreTitleRow();
   const title = document.createElement("div");
-  title.className = "min-w-0 text-lg font-semibold leading-7 text-default";
+  title.className = "min-w-0 break-words text-base font-medium text-default";
   title.appendChild(ghostBlock("my-1 h-5 w-44 rounded-md"));
   titleRow.appendChild(title);
   titleRow.appendChild(verifiedSafeGhostBadge());
@@ -1885,40 +1849,13 @@ function storeEntryIconUrl(entry: TweakStoreEntryView): string | null {
 }
 
 function sidebarUpdatePillButton(): HTMLButtonElement {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.dataset.codexppSidebarUpdate = "true";
-  btn.className =
-    "select-none no-drag cursor-interaction inline-flex shrink-0 items-center justify-center whitespace-nowrap";
-  Object.assign(btn.style, {
-    display: "none",
-    height: "20px",
-    borderRadius: "9999px",
-    border: "0",
-    background: "#0A84FF",
-    color: "#FFFFFF",
-    padding: "0 8px",
-    fontSize: "10px",
-    fontWeight: "700",
-    lineHeight: "20px",
-    letterSpacing: "0",
-    textTransform: "none",
-    boxShadow: "0 1px 2px rgba(0, 0, 0, 0.18)",
-  });
-  btn.textContent = "Update";
-  btn.title = "Open Codex-DC update";
-  btn.addEventListener("mouseenter", () => {
-    btn.style.background = "#0071E3";
-  });
-  btn.addEventListener("mouseleave", () => {
-    btn.style.background = "#0A84FF";
-  });
-  btn.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    void ipcRenderer.invoke("codexpp:open-external", btn.dataset.codexppReleaseUrl || CODEXDC_RELEASES_URL);
-  });
-  return btn;
+  const button = stockButton("Update", () => {
+    void ipcRenderer.invoke("codexpp:open-external", button.dataset.codexppReleaseUrl || CODEXDC_RELEASES_URL);
+  }, "secondary", "compact");
+  button.dataset.codexppSidebarUpdate = "true";
+  button.style.display = "none";
+  button.title = "Open Codex-DC update";
+  return button;
 }
 
 function refreshSidebarCodexPlusPlusUpdateButton(force = false): void {
@@ -1950,7 +1887,7 @@ function updateStoreUpdateBadge(count: number | null): void {
   const badge = document.querySelector<HTMLElement>("[data-codexpp-store-update-badge]");
   if (!badge) return;
   badge.dataset.codexppStoreUpdateCount = count === null ? "" : String(count);
-  applyStoreUpdateBadgeStyle(badge, count);
+  applyStoreUpdateBadgeStyle(badge);
   badge.hidden = count === null || count <= 0;
   badge.textContent = count && count > 0 ? String(count) : "";
   badge.title =
@@ -1959,22 +1896,8 @@ function updateStoreUpdateBadge(count: number | null): void {
       : "Installed tweaks are up to date";
 }
 
-function applyStoreUpdateBadgeStyle(badge: HTMLElement, count: number | null): void {
-  const hasUpdates = !!count && count > 0;
-  Object.assign(badge.style, {
-    minWidth: "24px",
-    height: "20px",
-    borderRadius: "9999px",
-    border: "0",
-    background: hasUpdates ? "#0A84FF" : "transparent",
-    color: "#FFFFFF",
-    padding: "0 7px",
-    fontSize: "12px",
-    fontWeight: "700",
-    lineHeight: "20px",
-    letterSpacing: "0",
-    boxShadow: hasUpdates ? "0 1px 2px rgba(0, 0, 0, 0.22)" : "none",
-  });
+function applyStoreUpdateBadgeStyle(badge: HTMLElement): void {
+  badge.className = metadataBadgeClass + " tabular-nums";
 }
 
 function currentStoreUpdateBadgeCount(): number {
@@ -1993,19 +1916,7 @@ function storeToolbarButton(
   onClick: () => void,
   variant: "primary" | "secondary" = "secondary",
 ): HTMLButtonElement {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className =
-    variant === "primary"
-      ? "border-default select-none no-drag cursor-interaction flex h-8 items-center gap-1 whitespace-nowrap rounded-lg border border-default bg-surface-card px-2 py-0 text-sm text-default enabled:hover:bg-primary-ghost-hover disabled:cursor-not-allowed disabled:opacity-40"
-      : "border-default select-none no-drag cursor-interaction flex h-8 items-center gap-1 whitespace-nowrap rounded-lg border border-transparent bg-text/5 px-2 py-0 text-sm text-default enabled:hover:bg-primary-ghost-hover disabled:cursor-not-allowed disabled:opacity-40";
-  btn.textContent = label;
-  btn.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onClick();
-  });
-  return btn;
+  return stockButton(label, onClick, variant, "page");
 }
 
 function storeIconButton(
@@ -2013,19 +1924,12 @@ function storeIconButton(
   label: string,
   onClick: () => void,
 ): HTMLButtonElement {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className =
-    "border-default select-none no-drag cursor-interaction flex h-8 w-8 items-center justify-center rounded-lg border border-transparent bg-text/5 p-0 text-default enabled:hover:bg-primary-ghost-hover disabled:cursor-not-allowed disabled:opacity-40";
-  btn.innerHTML = iconSvg;
-  btn.setAttribute("aria-label", label);
-  btn.title = label;
-  btn.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onClick();
-  });
-  return btn;
+  const button = stockButton("", onClick, "ghost", "toolbar");
+  button.classList.add("aspect-square", "shrink-0", "justify-center", "!px-0");
+  button.innerHTML = iconSvg;
+  button.setAttribute("aria-label", label);
+  button.title = label;
+  return button;
 }
 
 function refreshIconSvg(): string {
@@ -2040,9 +1944,9 @@ function refreshIconSvg(): string {
 function verifiedSafeBadge(): HTMLElement {
   const badge = document.createElement("span");
   badge.className =
-    "inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md border border-subtle bg-transparent px-2 text-xs font-medium text-codex-description";
+    metadataBadgeClass;
   badge.innerHTML =
-    `<svg width="13" height="13" viewBox="0 0 14 14" fill="none" class="text-info" aria-hidden="true">` +
+    `<svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">` +
     `<path d="M7 1.75 11.25 3.4v3.2c0 2.6-1.65 4.25-4.25 5.4-2.6-1.15-4.25-2.8-4.25-5.4V3.4L7 1.75Z" stroke="currentColor" stroke-width="1.15" stroke-linejoin="round"/>` +
     `<path d="M4.85 7.05 6.3 8.45l2.85-3.05" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>` +
     `</svg>` +
@@ -2069,25 +1973,15 @@ function tweakStoreVersionBadge(entry: TweakStoreEntryView, installedOverride?: 
 
 function storeVersionBadgeShell(hasUpdate: boolean): HTMLElement {
   const badge = document.createElement("span");
-  badge.className = [
-    "inline-flex h-8 min-w-0 max-w-full items-center rounded-lg border px-2.5 text-xs font-medium",
-    hasUpdate
-      ? "border-chart-blue/40 bg-info-soft text-default"
-      : "border-subtle bg-text/5 text-codex-description",
-  ].join(" ");
+  badge.className = `inline-flex min-w-0 max-w-full items-center text-xs ${hasUpdate ? "text-default" : "text-secondary"}`;
   return badge;
 }
 
 function storeStatusPill(label: string, tone: "neutral" | "info" = "neutral"): HTMLElement {
-  const pill = document.createElement("span");
-  pill.className = [
-    "inline-flex h-8 items-center justify-center whitespace-nowrap rounded-lg px-3 text-sm font-medium",
-    tone === "info"
-      ? "border border-chart-blue/40 bg-info-soft text-default"
-      : "bg-text/5 text-codex-description",
-  ].join(" ");
-  pill.textContent = label;
-  return pill;
+  const status = document.createElement("span");
+  status.className = `inline-flex items-center whitespace-nowrap text-sm ${tone === "info" ? "text-default" : "text-secondary"}`;
+  status.textContent = label;
+  return status;
 }
 
 function storeInstallButton(label: string, onClick: (button: HTMLButtonElement) => void): HTMLButtonElement {
@@ -2105,9 +1999,7 @@ function storeInstallButton(label: string, onClick: (button: HTMLButtonElement) 
 }
 
 function storeInstallButtonClass(): string {
-  return [
-    "select-none no-drag cursor-interaction flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-transparent bg-info-solid px-3 py-0 text-sm font-medium text-info-solid shadow-sm transition-colors not-disabled:not-aria-disabled:hover:bg-info-solid/90 disabled:cursor-not-allowed disabled:opacity-80",
-  ].filter(Boolean).join(" ");
+  return stockButtonClass("primary", "page");
 }
 
 function showStoreButtonLoading(button: HTMLButtonElement, label: string): void {
@@ -2140,35 +2032,10 @@ function resetStoreInstallButton(button: HTMLButtonElement, label: string): void
   button.textContent = label;
 }
 
-function showStoreToast(message: string): void {
-  let host = document.querySelector<HTMLElement>("[data-codexpp-store-toast-host]");
-  if (!host) {
-    host = document.createElement("div");
-    host.dataset.codexppStoreToastHost = "true";
-    host.className = "pointer-events-none fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2";
-    document.body.appendChild(host);
-  }
-  const toast = document.createElement("div");
-  toast.className =
-    "translate-y-2 rounded-xl border border-subtle bg-surface px-3 py-2 text-sm font-medium text-default opacity-0 shadow-lg transition-all duration-200";
-  toast.textContent = message;
-  host.appendChild(toast);
-  requestAnimationFrame(() => {
-    toast.classList.remove("translate-y-2", "opacity-0");
-  });
-  setTimeout(() => {
-    toast.classList.add("translate-y-2", "opacity-0");
-    setTimeout(() => {
-      toast.remove();
-      if (host && host.childElementCount === 0) host.remove();
-    }, 220);
-  }, 2600);
-}
-
 function storeMessageCard(title: string, description?: string): HTMLElement {
   const card = document.createElement("div");
   card.className =
-    "border-subtle flex min-h-[84px] flex-col justify-center gap-1 rounded-2xl border p-4 text-sm";
+    "border-default bg-surface-card flex flex-col gap-1 rounded-2xl border px-4 py-3 text-sm";
   const t = document.createElement("div");
   t.className = "font-medium text-default";
   t.textContent = title;
@@ -2281,7 +2148,7 @@ function tweakRow(
   if (!t.enabled) cell.style.opacity = "0.7";
 
   const header = document.createElement("div");
-  header.className = "flex items-start justify-between gap-4 p-3";
+  header.className = settingsRowClass + " max-sm:flex-col max-sm:items-stretch";
 
   const left = document.createElement("div");
   left.className = "flex min-w-0 flex-1 items-start gap-3";
@@ -2289,10 +2156,7 @@ function tweakRow(
   // ── Avatar ─────────────────────────────────────────────────────────────
   const avatar = document.createElement("div");
   avatar.className =
-    "flex shrink-0 items-center justify-center rounded-md border border-default overflow-hidden text-secondary";
-  avatar.style.width = "56px";
-  avatar.style.height = "56px";
-  avatar.style.backgroundColor = "var(--color-surface-card)";
+    "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-default bg-surface-card text-secondary";
   if (m.iconUrl) {
     const img = document.createElement("img");
     img.alt = "";
@@ -2330,7 +2194,7 @@ function tweakRow(
   stack.className = "flex min-w-0 flex-col gap-0.5";
 
   const titleRow = document.createElement("div");
-  titleRow.className = "flex items-center gap-2";
+  titleRow.className = "flex flex-wrap items-center gap-2";
   const name = document.createElement("div");
   name.className = "min-w-0 text-sm font-medium text-default";
   name.textContent = m.name;
@@ -2345,7 +2209,7 @@ function tweakRow(
   if (t.update?.updateAvailable) {
     const badge = document.createElement("span");
     badge.className =
-      "rounded-full border border-default bg-text/5 px-2 py-0.5 text-[11px] font-medium text-default";
+      metadataBadgeClass;
     badge.textContent = "Update Available";
     titleRow.appendChild(badge);
   }
@@ -2353,13 +2217,13 @@ function tweakRow(
 
   if (m.description) {
     const desc = document.createElement("div");
-    desc.className = "text-secondary min-w-0 text-sm";
+    desc.className = settingsDescriptionClass;
     desc.textContent = m.description;
     stack.appendChild(desc);
   }
 
   const meta = document.createElement("div");
-  meta.className = "flex items-center gap-2 text-xs text-secondary";
+  meta.className = "flex flex-wrap items-center gap-2 text-xs text-secondary";
   const authorEl = renderAuthor(m.author);
   if (authorEl) meta.appendChild(authorEl);
   if (m.githubRepo) {
@@ -2394,7 +2258,7 @@ function tweakRow(
     for (const tag of m.tags) {
       const pill = document.createElement("span");
       pill.className =
-        "rounded-full border border-default bg-text/5 px-2 py-0.5 text-[11px] text-secondary";
+        metadataBadgeClass;
       pill.textContent = tag;
       tagsRow.appendChild(pill);
     }
@@ -2406,7 +2270,7 @@ function tweakRow(
 
   // ── Toggle ────────────────────────────────────────────────────────────
   const right = document.createElement("div");
-  right.className = "flex shrink-0 items-center gap-2 pt-0.5";
+  right.className = settingsActionsClass;
   if (t.enabled && pages.length > 0) {
     const configureBtn = compactButton("Configure", () => {
       activatePage({ kind: "registered", id: pages[0]!.id });
@@ -2424,11 +2288,10 @@ function tweakRow(
     );
   }
   right.appendChild(
-    switchControl(t.enabled, async (next) => {
+    settingsSwitch(t.enabled, async (next) => {
       await ipcRenderer.invoke("codexpp:set-tweak-enabled", m.id, next);
-      // The main process broadcasts a reload which will re-fetch the list
-      // and re-render. We don't optimistically toggle to avoid drift.
-    }),
+      // The main process broadcasts a reload to re-fetch and render the list.
+    }, `Enable ${m.name}`),
   );
   header.appendChild(right);
 
@@ -2442,7 +2305,7 @@ function tweakRow(
       "flex flex-col divide-y-[0.5px] divide-border border-t-[0.5px] border-default";
     for (const s of sections) {
       const body = document.createElement("div");
-      body.className = "p-3";
+      body.className = "px-4 py-3";
       try {
         s.render(body);
       } catch (e) {
@@ -2485,14 +2348,18 @@ function openPublishTweakDialog(): void {
   const existing = document.querySelector<HTMLElement>("[data-codexpp-publish-dialog]");
   existing?.remove();
 
-  const overlay = document.createElement("div");
-  overlay.dataset.codexppPublishDialog = "true";
-  overlay.className = "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4";
-
-  const dialog = document.createElement("div");
+  const dialog = document.createElement("dialog");
+  dialog.dataset.codexppPublishDialog = "true";
   dialog.className =
-    "flex w-full max-w-xl flex-col gap-4 rounded-lg border border-default bg-surface p-4 shadow-xl";
-  overlay.appendChild(dialog);
+    "codexpp-publish-dialog m-auto w-130 max-w-[92vw] rounded-form-dialog border-0 bg-surface-elevated-secondary p-6 text-default shadow-form-dialog ring-[0.5px] ring-border";
+  dialog.setAttribute("aria-labelledby", "codexpp-publish-title");
+  dialog.setAttribute("aria-describedby", "codexpp-publish-description");
+  const backdrop = document.createElement("style");
+  backdrop.textContent = ".codexpp-publish-dialog::backdrop { background: var(--color-dialog-overlay); }";
+  dialog.appendChild(backdrop);
+  const content = document.createElement("div");
+  content.className = "flex flex-col gap-4";
+  dialog.appendChild(content);
 
   const header = document.createElement("div");
   header.className = "flex items-start justify-between gap-3";
@@ -2500,40 +2367,48 @@ function openPublishTweakDialog(): void {
   titleStack.className = "flex min-w-0 flex-col gap-1";
   const title = document.createElement("div");
   title.className = "text-base font-medium text-default";
+  title.id = "codexpp-publish-title";
   title.textContent = "Publish Tweak";
   const subtitle = document.createElement("div");
   subtitle.className = "text-sm text-secondary";
+  subtitle.id = "codexpp-publish-description";
   subtitle.textContent = "Submit a GitHub repo for admin review. Codex-DC records the exact commit admins must review and pin.";
   titleStack.appendChild(title);
   titleStack.appendChild(subtitle);
   header.appendChild(titleStack);
-  header.appendChild(compactButton("Dismiss", () => overlay.remove()));
-  dialog.appendChild(header);
+  header.appendChild(stockButton("Dismiss", () => dialog.close(), "ghost", "dialog"));
+  content.appendChild(header);
 
   const repoInput = document.createElement("input");
   repoInput.type = "text";
   repoInput.placeholder = "owner/repo or https://github.com/owner/repo";
-  repoInput.className =
-    "h-10 rounded-lg border border-default bg-transparent px-3 text-sm text-default focus:outline-none";
-  dialog.appendChild(repoInput);
+  repoInput.className = settingsInputClass;
+  repoInput.setAttribute("aria-label", "GitHub repository");
+  content.appendChild(repoInput);
 
   const status = document.createElement("div");
   status.className = "min-h-5 text-sm text-secondary";
+  status.setAttribute("role", "status");
   status.textContent = "The manifest should include an iconUrl suitable for the store.";
-  dialog.appendChild(status);
+  content.appendChild(status);
 
   const actions = document.createElement("div");
   actions.className = "flex items-center justify-end gap-2";
-  const submit = compactButton("Open Review Issue", () => {
+  const submit = stockButton("Open Review Issue", () => {
     void submitPublishTweak(repoInput, status);
-  });
+  }, "primary", "dialog");
   actions.appendChild(submit);
-  dialog.appendChild(actions);
+  content.appendChild(actions);
 
-  overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) overlay.remove();
+  dialog.addEventListener("click", (event) => {
+    if (event.target !== dialog) return;
+    const bounds = dialog.getBoundingClientRect();
+    if (event.clientX < bounds.left || event.clientX > bounds.right ||
+        event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close();
   });
-  document.body.appendChild(overlay);
+  dialog.addEventListener("close", () => dialog.remove());
+  document.body.appendChild(dialog);
+  dialog.showModal();
   repoInput.focus();
 }
 
@@ -2587,13 +2462,13 @@ function panelShell(
   inner.className =
     options?.wide
       ? "mx-auto flex w-full max-w-5xl flex-col"
-      : "mx-auto flex w-full flex-col max-w-2xl";
+      : "group/settings mx-auto flex w-full flex-col max-w-2xl";
   scroll.appendChild(inner);
 
   const headerWrap = document.createElement("div");
   headerWrap.className = "flex items-center justify-between gap-3 pb-panel";
   const headerInner = document.createElement("div");
-  headerInner.className = "flex min-w-0 flex-1 flex-col gap-1.5 pb-panel";
+  headerInner.className = "flex min-w-0 flex-1 flex-col gap-1.5";
   const titleLine = document.createElement("div");
   titleLine.className = "flex min-w-0 items-center gap-2";
   const heading = document.createElement("div");
@@ -2652,8 +2527,7 @@ function sectionTitle(text: string, trailing?: HTMLElement): HTMLElement {
 function openInPlaceButton(label: string, onClick: () => void): HTMLButtonElement {
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.className =
-    "border-default select-none no-drag cursor-interaction flex items-center gap-1 border whitespace-nowrap focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 rounded-lg text-codex-description enabled:hover:bg-primary-ghost-hover data-[state=open]:bg-primary-ghost-hover border-transparent h-8 px-2 py-0 text-base leading-[18px]";
+  btn.className = stockButtonClass("ghost", "toolbar");
   btn.innerHTML =
     `${label}` +
     `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" class="icon-2xs" aria-hidden="true">` +
@@ -2668,96 +2542,27 @@ function openInPlaceButton(label: string, onClick: () => void): HTMLButtonElemen
 }
 
 function compactButton(label: string, onClick: () => void): HTMLButtonElement {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className =
-    "border-default select-none no-drag cursor-interaction inline-flex h-8 items-center whitespace-nowrap rounded-lg border px-2 text-sm text-default enabled:hover:bg-primary-ghost-hover disabled:cursor-not-allowed disabled:opacity-40";
-  btn.textContent = label;
-  btn.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onClick();
-  });
-  return btn;
+  return stockButton(label, onClick);
 }
 
 function roundedCard(): HTMLElement {
   const card = document.createElement("div");
   card.className =
-    "border-default bg-surface-card flex flex-col divide-y-[0.5px] divide-border rounded-lg border";
+    "border-default bg-surface-card flex flex-col divide-y divide-border overflow-hidden rounded-2xl border";
   return card;
 }
 
 function rowSimple(title: string | undefined, description?: string): HTMLElement {
-  const row = document.createElement("div");
-  row.className = "flex items-center justify-between gap-4 p-3";
-  const left = document.createElement("div");
-  left.className = "flex min-w-0 items-center gap-3";
-  const stack = document.createElement("div");
-  stack.className = "flex min-w-0 flex-col gap-1";
-  if (title) {
-    const t = document.createElement("div");
-    t.className = "min-w-0 text-sm text-default";
-    t.textContent = title;
-    stack.appendChild(t);
-  }
-  if (description) {
-    const d = document.createElement("div");
-    d.className = "text-secondary min-w-0 text-sm";
-    d.textContent = description;
-    stack.appendChild(d);
-  }
-  left.appendChild(stack);
-  row.appendChild(left);
-  return row;
+  return settingsRow(title, description).row;
 }
 
-/**
- * Codex-styled toggle switch. Markup mirrors the General > Permissions row
- * switch we captured: outer button (role=switch), inner pill, sliding knob.
- */
+/** Uses the desktop's stock switch geometry and accent. */
+
 function switchControl(
   initial: boolean,
   onChange: (next: boolean) => void | Promise<void>,
 ): HTMLButtonElement {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.setAttribute("role", "switch");
-
-  const pill = document.createElement("span");
-  const knob = document.createElement("span");
-  knob.className =
-    "rounded-full border border-control-thumb-on-accent bg-control-thumb-on-accent shadow-sm transition-transform duration-basic ease-out h-4 w-4 data-[state=unchecked]:translate-x-[2px] data-[state=checked]:translate-x-[14px] rtl:data-[state=unchecked]:-translate-x-[2px] rtl:data-[state=checked]:-translate-x-[14px]";
-  pill.setAttribute("aria-hidden", "true");
-  pill.appendChild(knob);
-
-  const apply = (on: boolean): void => {
-    btn.setAttribute("aria-checked", String(on));
-    btn.dataset.state = on ? "checked" : "unchecked";
-    btn.className =
-      "inline-flex items-center text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded-full cursor-interaction disabled:cursor-not-allowed disabled:opacity-60";
-    pill.className = `relative inline-flex shrink-0 items-center rounded-full transition-colors duration-basic ease-out h-5 w-8 ${
-      on ? "bg-chart-blue" : "bg-text/10"
-    }`;
-    pill.dataset.state = on ? "checked" : "unchecked";
-    knob.dataset.state = on ? "checked" : "unchecked";
-  };
-  apply(initial);
-
-  btn.appendChild(pill);
-  btn.addEventListener("click", async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const next = btn.getAttribute("aria-checked") !== "true";
-    apply(next);
-    btn.disabled = true;
-    try {
-      await onChange(next);
-    } finally {
-      btn.disabled = false;
-    }
-  });
-  return btn;
+  return settingsSwitch(initial, onChange);
 }
 
 function dot(): HTMLElement {
