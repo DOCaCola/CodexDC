@@ -1,20 +1,32 @@
 import { ipcRenderer } from "electron";
+import {
+  settingsDescriptionClass,
+  settingsInputClass,
+  settingsRow,
+  settingsSelectClass,
+  settingsSwitch,
+  stockButton,
+} from "./stock-settings-controls";
 
 /** Core Config content, independent of installed tweaks. */
 export function renderBackendSettings(root: HTMLElement): void {
-  root.className = "flex flex-col gap-3 p-3 text-sm text-default";
+  root.className = "flex flex-col divide-y divide-border text-sm text-default";
+  const summary = settingsRow("Running CLI version");
   const status = document.createElement("p");
+  status.className = settingsDescriptionClass;
   const runningVersion = document.createElement("p");
-  runningVersion.textContent = "Running CLI version: Loading…";
-  const notice = document.createElement("p");
-  notice.className = "text-secondary";
-  notice.textContent = "Changes apply after you quit and reopen Codex-DC. Finish active tasks first.";
+  runningVersion.className = "text-sm text-secondary tabular-nums";
+  runningVersion.textContent = "Loading…";
+  summary.stack.appendChild(status);
+  summary.actions.appendChild(runningVersion);
 
-  const providerLabel = document.createElement("label");
-  providerLabel.className = "flex items-center justify-between gap-3";
-  providerLabel.append("CLI source");
+  const providerRow = settingsRow(
+    "CLI source",
+    "Changes apply after you quit and reopen Codex-DC. Finish active tasks first.",
+  );
   const provider = document.createElement("select");
-  provider.className = "h-8 rounded-lg border border-default bg-surface px-2 text-sm text-default";
+  provider.className = settingsSelectClass;
+  provider.setAttribute("aria-label", "CLI source");
   for (const [value, text] of [
     ["fork", "DC fork (default)"],
     ["bundled", "Desktop bundled (stock)"],
@@ -25,43 +37,54 @@ export function renderBackendSettings(root: HTMLElement): void {
     option.textContent = text;
     provider.append(option);
   }
-  providerLabel.append(provider);
-  const updateLabel = document.createElement("label");
-  const autoUpdate = document.createElement("input");
-  autoUpdate.type = "checkbox";
-  updateLabel.append(autoUpdate, " Automatically update the DC fork before launch");
-  const updateHelp = document.createElement("p");
-  updateHelp.className = "text-secondary";
-  updateHelp.textContent = "Checks at most once per hour when the DC fork is selected. Running sessions are not restarted. Rollback turns automatic updates off.";
+  providerRow.actions.appendChild(provider);
+  const updateRow = settingsRow(
+    "Automatically update the DC fork",
+    "Checks before launch, at most once per hour when the DC fork is selected. Running sessions are not restarted. Rollback turns automatic updates off.",
+  );
+  const autoUpdate = settingsSwitch(false, async (checked) => {
+    setBusy(true);
+    try {
+      await ipcRenderer.invoke("codexdc:backend", "auto-update", checked ? "on" : "off");
+      output.textContent = "CLI update preference saved.";
+    } catch (error) { output.textContent = String(error); }
+    finally {
+      try { await refresh(); } catch (error) { output.textContent = String(error); }
+      setBusy(false);
+    }
+  }, "Automatically update the DC fork");
+  updateRow.actions.appendChild(autoUpdate);
 
-  const local = document.createElement("div");
-  const pathLabel = document.createElement("label");
-  pathLabel.className = "flex flex-col gap-2";
-  pathLabel.append("Local CLI executable");
+  const local = settingsRow(
+    "Local CLI executable",
+    "Uses your executable directly, so local rebuilds remain linked.",
+  ).row;
+  local.className = "flex flex-col gap-2 px-4 py-3";
   const path = document.createElement("input");
   path.type = "text";
   path.spellcheck = false;
-  path.className = "h-8 w-full rounded-lg border border-default bg-surface px-2 text-sm text-default";
-  pathLabel.append(path);
-  const help = document.createElement("p");
-  help.className = "text-secondary";
-  help.textContent = "Uses your executable directly, so local rebuilds remain linked.";
-  local.append(pathLabel, help);
+  path.className = settingsInputClass;
+  path.setAttribute("aria-label", "Local CLI executable");
+  local.appendChild(path);
 
+  const controlsRow = document.createElement("div");
+  controlsRow.className = "flex flex-col gap-3 px-4 py-3";
   const controls = document.createElement("div");
   controls.className = "flex flex-wrap gap-2";
   const output = document.createElement("p");
+  output.className = settingsDescriptionClass;
   output.setAttribute("role", "status");
+  controlsRow.append(controls, output);
   const refresh = async () => {
     const state = await ipcRenderer.invoke("codexdc:backend", "status");
     provider.value = state.provider;
-    autoUpdate.checked = state.autoUpdate === true;
+    autoUpdate.setChecked(state.autoUpdate === true);
     path.value = state.development?.executable ?? "";
     status.textContent = `Saved: ${state.provider === "development" ? "Local path" : state.provider === "fork" ? "DC fork" : "Desktop bundled (stock)"}. ` +
       `Installed DC fork: ${state.installed?.version ?? "none"}. ` +
       `Running: ${state.activeExecutable ?? "desktop bundled"}.`;
     if (state.updateCheck?.error) status.textContent += ` Last CLI update failed: ${state.updateCheck.error}`;
-    runningVersion.textContent = `Running CLI version: ${state.activeVersion ?? "Unavailable"}.`;
+    runningVersion.textContent = state.activeVersion ?? "Unavailable";
     showLocal();
   };
   const setBusy = (busy: boolean) => {
@@ -70,17 +93,13 @@ export function renderBackendSettings(root: HTMLElement): void {
     }
   };
   const add = (label: string, run: () => Promise<string>) => {
-    const button = document.createElement("button");
-    button.textContent = label;
-    button.type = "button";
-    button.className = "inline-flex h-8 items-center rounded-lg border border-default px-2 text-sm text-default enabled:hover:bg-primary-ghost-hover focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50";
-    button.onclick = async () => {
+    const button = stockButton(label, async () => {
       setBusy(true);
       output.textContent = "Working…";
       try { output.textContent = await run(); }
       catch (error) { output.textContent = String(error); }
       finally { setBusy(false); }
-    };
+    });
     controls.append(button);
     return button;
   };
@@ -94,17 +113,6 @@ export function renderBackendSettings(root: HTMLElement): void {
     browse.hidden = local.hidden;
   };
   provider.addEventListener("change", showLocal);
-  autoUpdate.addEventListener("change", async () => {
-    setBusy(true);
-    try {
-      await ipcRenderer.invoke("codexdc:backend", "auto-update", autoUpdate.checked ? "on" : "off");
-      output.textContent = "CLI update preference saved.";
-    } catch (error) { output.textContent = String(error); }
-    finally {
-      try { await refresh(); } catch (error) { output.textContent = String(error); }
-      setBusy(false);
-    }
-  });
   add("Save CLI selection", async () => {
     if (provider.value === "development") {
       await ipcRenderer.invoke("codexdc:backend", "develop", path.value.trim());
@@ -130,7 +138,7 @@ export function renderBackendSettings(root: HTMLElement): void {
     await refresh();
     return "Previous DC fork version restored. Quit and reopen Codex-DC to apply.";
   });
-  root.append(status, runningVersion, providerLabel, local, updateLabel, updateHelp, notice, controls, output);
+  root.append(summary.row, providerRow.row, local, updateRow.row, controlsRow);
   showLocal();
   setBusy(true);
   void refresh().catch((error) => { output.textContent = String(error); }).finally(() => setBusy(false));
