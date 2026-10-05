@@ -1,5 +1,8 @@
 #!/usr/bin/env node
+import { AppRunningError } from "./errors.js";
 import sade from "sade";
+import { confirmMacDesktopStartup } from "./mac-desktop-retention.js";
+import { macUpdate } from "./mac-update.js";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { findSourceRoot } from "./source-root.js";
@@ -21,7 +24,7 @@ import { browserUi } from "./commands/browser-ui.js";
 import { doctor } from "./commands/doctor.js";
 import { safeMode } from "./commands/safe-mode.js";
 import { CODEXDC_VERSION } from "./version.js";
-import { buildCliFailureIssueUrl, showPatchFailedAlert } from "./alerts.js";
+import { showRepairFailedAlert } from "./alerts.js";
 import { capKnownLogFiles } from "./logging.js";
 
 interface InstallCliOpts {
@@ -48,15 +51,14 @@ function wrap<T extends (...args: never[]) => unknown | Promise<unknown>>(fn: T)
       .then(() => fn(...args))
       .catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : String(e);
-        const command = process.argv[2];
+        if (e instanceof AppRunningError) {
+          console.error(msg);
+          process.exit(1);
+        }
         console.error("\n" + kleur.red().bold("✗ codexdc failed"));
         console.error(msg);
         console.error("");
-        console.error(
-          kleur.yellow("If the message above does not explain how to fix it, please report this on GitHub:"),
-        );
-        console.error(buildCliFailureIssueUrl(command, msg));
-        maybeShowPatchFailedAlert(msg);
+        maybeShowRepairFailedAlert(msg);
         process.exit(1);
       });
   }) as unknown as T;
@@ -103,10 +105,10 @@ async function runDevTweak(target: string | undefined, opts: never): Promise<voi
   return devTweak(target, opts);
 }
 
-function maybeShowPatchFailedAlert(message: string): void {
+function maybeShowRepairFailedAlert(message: string): void {
   const command = process.argv[2];
   if (command !== "repair") return;
-  showPatchFailedAlert(message);
+  showRepairFailedAlert(message);
 }
 
 forwardToActivePackage(findSourceRoot(dirname(fileURLToPath(import.meta.url))));
@@ -231,6 +233,16 @@ prog
   .option("--off", "Disable safe mode and return to normal tweak loading")
   .option("--status", "Print current safe mode status")
   .action(wrap(safeMode));
+
+prog.command("mac-confirm-startup <installed-at>").describe("Confirm desktop startup and prune unused macOS releases")
+  .action(wrap(async (installedAt: string) => {
+    if (process.platform !== "darwin") throw new Error("mac-confirm-startup requires macOS.");
+    console.log(JSON.stringify(confirmMacDesktopStartup(installedAt)));
+  }));
+
+prog.command("mac-update").describe("Check or apply an installed macOS desktop update")
+  .option("--pid", "Wait for the requesting desktop to exit before refresh")
+  .action(wrap(macUpdate));
 
 prog.command("setup").describe("Open guided setup and maintenance").action(wrap(manager));
 prog.command("launch").describe("Launch CodexDC with its selected CLI backend").action(wrap(launchManaged));

@@ -362,43 +362,6 @@ function log(level: "info" | "warn" | "error", ...args: unknown[]): void {
   if (level === "error") console.error("[codexdc]", ...args);
 }
 
-function installSparkleUpdateHook(): void {
-  if (process.platform !== "darwin") return;
-
-  const Module = require("node:module") as typeof import("node:module") & {
-    _load?: (request: string, parent: unknown, isMain: boolean) => unknown;
-  };
-  const originalLoad = Module._load;
-  if (typeof originalLoad !== "function") return;
-
-  Module._load = function codexPlusPlusModuleLoad(request: string, parent: unknown, isMain: boolean) {
-    const loaded = originalLoad.apply(this, [request, parent, isMain]) as unknown;
-    if (typeof request === "string" && /sparkle(?:\.node)?$/i.test(request)) {
-      wrapSparkleExports(loaded);
-    }
-    return loaded;
-  };
-}
-
-function wrapSparkleExports(loaded: unknown): void {
-  if (!loaded || typeof loaded !== "object") return;
-  const exports = loaded as Record<string, unknown> & { __codexppSparkleWrapped?: boolean };
-  if (exports.__codexppSparkleWrapped) return;
-  exports.__codexppSparkleWrapped = true;
-
-  for (const name of ["installUpdatesIfAvailable"]) {
-    const fn = exports[name];
-    if (typeof fn !== "function") continue;
-    exports[name] = function codexPlusPlusSparkleWrapper() {
-      void runMaintenance("update-codex");
-    };
-  }
-
-  if (exports.default && exports.default !== exports) {
-    wrapSparkleExports(exports.default);
-  }
-}
-
 // Surface unhandled errors from anywhere in the main process to our log.
 process.on("uncaughtException", (e: Error & { code?: string }) => {
   log("error", "uncaughtException", { code: e.code, message: e.message, stack: e.stack });
@@ -408,7 +371,7 @@ process.on("unhandledRejection", (e) => {
 });
 
 if (process.platform === "win32") require(join(runtimeDir!, "platform/windows/index.js")).start({ log: makeLogger("windows-update") });
-installSparkleUpdateHook();
+if (process.platform === "darwin") require(join(runtimeDir!, "platform/macos/index.js")).start({ log: makeLogger("macos-update") });
 
 interface LoadedMainTweak {
   stop?: () => void;

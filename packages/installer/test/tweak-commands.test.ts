@@ -13,10 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
-  buildCliFailureIssueUrl,
-  buildPatchFailureIssueUrl,
   codexReopenScript,
-  isMacAppManagementError,
 } from "../src/alerts";
 import { findCodexMainCandidates } from "../src/commands/install";
 import { createTweak } from "../src/commands/create-tweak";
@@ -362,26 +359,6 @@ test("Codex main candidates include nested recovered Vite bundle files", () => {
   });
 });
 
-test("patch failure report URL includes a prefilled GitHub issue", () => {
-  const url = new URL(buildPatchFailureIssueUrl("Codex window services hook point not found"));
-
-  assert.equal(url.origin + url.pathname, "https://github.com/DOCaCola/CodexDC/issues/new");
-  assert.equal(url.searchParams.get("title"), "Codex-DC failed to patch Codex after update");
-  assert.match(url.searchParams.get("body") ?? "", /Codex window services hook point not found/);
-  assert.match(url.searchParams.get("body") ?? "", /Platform:/);
-});
-
-test("CLI failure report URL includes command and environment details", () => {
-  const url = new URL(buildCliFailureIssueUrl("install", "codesign not installed"));
-
-  assert.equal(url.origin + url.pathname, "https://github.com/DOCaCola/CodexDC/issues/new");
-  assert.equal(url.searchParams.get("title"), "Codex-DC install failed");
-  assert.match(url.searchParams.get("body") ?? "", /codexdc install/);
-  assert.match(url.searchParams.get("body") ?? "", /codesign not installed/);
-  assert.match(url.searchParams.get("body") ?? "", /Codex-DC:/);
-  assert.match(url.searchParams.get("body") ?? "", /Node:/);
-});
-
 test("Codex reopen script launches by bundle id from a detached helper", () => {
   const script = codexReopenScript("/Applications/Codex.app", "com.openai.codex", 1000);
 
@@ -391,13 +368,7 @@ test("Codex reopen script launches by bundle id from a detached helper", () => {
   assert.match(script, /tell application id "com\.openai\.codex" to activate/);
 });
 
-test("App Management failures use the dedicated repair alert path", () => {
-  assert.equal(
-    isMacAppManagementError("macOS App Management is blocking modification of /Applications/Codex.app."),
-    true,
-  );
-  assert.equal(isMacAppManagementError("Codex window services hook point not found"), false);
-});
+
 
 test("self-update release tags only download newer semver releases", () => {
   assert.equal(releaseVersionFromTag("v0.1.3"), "0.1.3");

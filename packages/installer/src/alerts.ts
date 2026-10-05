@@ -3,47 +3,19 @@ import { platform } from "node:os";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { readPlist } from "./plist.js";
-import { CODEXDC_VERSION } from "./version.js";
 import { locateCodex } from "./platform.js";
 import { getOpenReport, type OpenReport } from "./commands/debug.js";
 
 const CODEX_BUNDLE_ID = "com.openai.codex";
-const CODEXDC_REPO_URL = "https://github.com/DOCaCola/CodexDC";
 
-export function showPatchFailedAlert(errorMessage: string): void {
-  if (isMacAppManagementError(errorMessage)) {
-    showAppManagementPatchFailedAlert(errorMessage);
-    return;
-  }
-
-  const button = showAlert({
-    title: "Codex-DC could not patch Codex",
-    message:
-      "Codex was updated, but Codex-DC could not reapply itself automatically.\n\n" +
-      `${errorMessage}\n\n` +
-      "Run codexdc repair from Terminal after Codex finishes updating, or report this failure on GitHub.",
-    buttons: ["Dismiss", "Report on GitHub"],
-    defaultButton: "Dismiss",
+export function showRepairFailedAlert(errorMessage: string): void {
+  showAlert({
+    title: "CodexDC repair could not finish",
+    message: errorMessage,
+    buttons: ["OK"],
+    defaultButton: "OK",
     critical: true,
   });
-
-  if (button === "Report on GitHub") {
-    openUrl(buildPatchFailureIssueUrl(errorMessage));
-  }
-}
-
-function showAppManagementPatchFailedAlert(errorMessage: string): void {
-  const button = showAlert({
-    title: "Codex-DC needs app repair",
-    message: 'Run "codexdc repair" in your terminal.',
-    buttons: ["Dismiss", "Report Issue on GitHub"],
-    defaultButton: "Dismiss",
-    critical: true,
-  });
-
-  if (button === "Report Issue on GitHub") {
-    openUrl(buildPatchFailureIssueUrl(errorMessage));
-  }
 }
 
 export function showUpdateModePausedAlert(appRoot: string, codexVersion: string | null): void {
@@ -315,85 +287,6 @@ function codexOpenReport(appRoot: string): OpenReport | null {
   } catch {
     return null;
   }
-}
-
-export function buildPatchFailureIssueUrl(errorMessage: string): string {
-  const title = "Codex-DC failed to patch Codex after update";
-  const body = [
-    "## Summary",
-    "Codex-DC could not reapply its patch after Codex updated.",
-    "",
-    "## Error",
-    "```text",
-    trimIssueError(errorMessage),
-    "```",
-    "",
-    "## Environment",
-    `- Platform: ${process.platform}`,
-    `- Arch: ${process.arch}`,
-    `- Node: ${process.version}`,
-    "",
-    "## Debugging context",
-    "- Codex app path: ",
-    "- Codex version shown in app, if known: ",
-    "- Was Codex running during the update? ",
-    "- Did rerunning `codexdc repair` change the result? ",
-  ].join("\n");
-
-  const params = new URLSearchParams({ title, body });
-  return `${CODEXDC_REPO_URL}/issues/new?${params.toString()}`;
-}
-
-export function buildCliFailureIssueUrl(command: string | undefined, errorMessage: string): string {
-  const commandLabel = command?.trim() || "(unknown command)";
-  const title = `Codex-DC ${commandLabel} failed`;
-  const body = [
-    "## Summary",
-    `\`codexdc ${commandLabel}\` failed.`,
-    "",
-    "## Command",
-    "```text",
-    `codexdc ${commandLabel}`,
-    "```",
-    "",
-    "## Error",
-    "```text",
-    trimIssueError(errorMessage),
-    "```",
-    "",
-    "## Environment",
-    `- Codex-DC: ${CODEXDC_VERSION}`,
-    `- Platform: ${process.platform}`,
-    `- Arch: ${process.arch}`,
-    `- Node: ${process.version}`,
-    "",
-    "## Debugging context",
-    "- Codex app path, if shown: ",
-    "- Install source: ",
-    "- Did rerunning the command change the result? ",
-    "- Any recent Codex or Codex-DC update? ",
-  ].join("\n");
-
-  const params = new URLSearchParams({ title, body });
-  return `${CODEXDC_REPO_URL}/issues/new?${params.toString()}`;
-}
-
-function trimIssueError(errorMessage: string): string {
-  const trimmed = errorMessage.trim() || "(empty error message)";
-  const maxLength = 4000;
-  if (trimmed.length <= maxLength) return trimmed;
-  return `${trimmed.slice(0, maxLength)}\n... truncated ...`;
-}
-
-export function isMacAppManagementError(errorMessage: string): boolean {
-  return /macOS App Management is blocking modification/.test(errorMessage);
-}
-
-function openUrl(url: string): void {
-  if (platform() !== "darwin") return;
-  try {
-    execFileSync("open", [url], { stdio: "ignore" });
-  } catch {}
 }
 
 function codexBundleId(appRoot: string): string {
