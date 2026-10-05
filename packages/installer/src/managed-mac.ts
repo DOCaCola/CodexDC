@@ -1,3 +1,6 @@
+import { isConfirmedMacInstall, replaceMacRollback, shouldRotateMacBackup } from "./mac-desktop-retention.js";
+import { selectMacSource } from "./mac-source.js";
+import { AppRunningError } from "./errors.js";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -17,10 +20,10 @@ import { writeManagedMacExecutableIdentity } from "./mac-executable-identity.js"
 export const MANAGED_MAC_ID = "io.github.docacola.codexdc";
 function stagedSourceRoot(): string { return resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", ".."); }
 
-export async function installManagedMac(opts: { app?: string; force?: boolean; quiet?: boolean } = {}): Promise<void> {
+export async function installManagedMac(opts: { app?: string; downloadedSource?: string; force?: boolean; quiet?: boolean } = {}): Promise<void> {
   const paths = ensureUserPaths();
   const previous = readState(paths.stateFile);
-  const source = locateCodex(opts.app ?? previous?.officialAppRoot);
+  const source = locateCodex(opts.downloadedSource ?? opts.app ?? (previous?.officialAppRoot ? selectMacSource(previous) : undefined));
   if (source.bundleId === MANAGED_MAC_ID || source.appRoot === previous?.appRoot) {
     throw new Error("Select the official Codex installation as the source.");
   }
@@ -32,17 +35,23 @@ export async function installManagedMac(opts: { app?: string; force?: boolean; q
       readHeaderHash(join(previous.appRoot, "Contents", "Resources", "app.asar")).headerHash === previous.patchedAsarHash) return;
   const destination = previous?.managedCopy ? previous.appRoot : join(homedir(), "Applications", "CodexDC.app");
   if (existsSync(destination) && !previous?.managedCopy) throw new Error(`${destination} already exists and is not owned by CodexDC.`);
-  if (existsSync(destination) && isCodexRunning(destination)) throw new Error("Close CodexDC before refreshing its managed copy.");
+  if (existsSync(destination) && isCodexRunning(destination)) throw new AppRunningError();
   const identity = prepareCodeSigning({ useLocalIdentity: true, identityName: "CodexDC Local Signing" });
   const lockPath = join(paths.root, "managed-install.lock");
   const lock = openSync(lockPath, "wx");
   const stage = join(dirname(destination), `.CodexDC-${randomUUID()}.app`);
   const backup = `${destination}.previous`;
+  const displaced = join(dirname(destination), `.CodexDC-replaced-${randomUUID()}.app`);
+  const confirmed = previous ? isConfirmedMacInstall(paths.root, previous) : false;
+  const rotateBackup = previous && existsSync(destination) && shouldRotateMacBackup(confirmed,
+    String(readPlist(join(destination, "Contents/Info.plist")).CFBundleVersion),
+    String(readPlist(source.metaPath!).CFBundleVersion), existsSync(backup));
   mkdirSync(dirname(destination), { recursive: true });
   const oldState = existsSync(paths.stateFile) ? readFileSync(paths.stateFile) : null;
   const recovery = mkdtempSync(join(paths.root, ".mac-recovery-"));
   cpSync(paths.runtime, join(recovery, "runtime"), { recursive: true });
   cpSync(paths.binDir, join(recovery, "bin"), { recursive: true });
+  if (oldState) writeFileSync(join(recovery, "state.json"), oldState);
   let activated = false;
   try {
     execFileSync("ditto", [source.appRoot, stage]);
@@ -68,22 +77,23 @@ export async function installManagedMac(opts: { app?: string; force?: boolean; q
     signCodexApp(stage, { useLocalIdentity: true, preparedIdentity: identity });
     if (!verifySignature(stage).ok) throw new Error("Managed app signature verification failed");
     const stagedState = readState(paths.stateFile)!;
-    rmSync(backup, { recursive: true, force: true });
-    if (existsSync(destination)) renameSync(destination, backup);
+    if (existsSync(destination)) renameSync(destination, displaced);
     try { renameSync(stage, destination); } catch (error) {
-      if (existsSync(backup)) renameSync(backup, destination);
+      if (existsSync(displaced)) renameSync(displaced, destination);
       throw error;
     }
     activated = true;
-    writeState(paths.stateFile, { ...stagedState, appRoot: destination, officialAppRoot: source.appRoot,
+    writeState(paths.stateFile, { ...stagedState, appRoot: destination, officialAppRoot: opts.app ?? previous?.officialAppRoot ?? source.appRoot,
+      downloadedAppRoot: opts.downloadedSource ?? (source.appRoot === previous?.downloadedAppRoot ? previous.downloadedAppRoot : undefined),
       sourceAsarHash: sourceHash, managedCopy: true, resigned: true, signingMode: "local-identity",
       signingIdentity: identity!.name, signingIdentityHash: identity!.hash, nodePath: process.execPath,
       codexChannel: source.channel });
     console.log(`CodexDC installed at ${destination}`);
   } catch (error) {
     if (activated) {
+      activated = false;
       rmSync(destination, { recursive: true, force: true });
-      if (existsSync(backup)) renameSync(backup, destination);
+      if (existsSync(displaced)) renameSync(displaced, destination);
     }
     rmSync(paths.runtime, { recursive: true, force: true });
     cpSync(join(recovery, "runtime"), paths.runtime, { recursive: true });
@@ -94,8 +104,17 @@ export async function installManagedMac(opts: { app?: string; force?: boolean; q
     throw error;
   } finally {
     rmSync(stage, { recursive: true, force: true });
-    rmSync(recovery, { recursive: true, force: true });
-    closeSync(lock); rmSync(lockPath, { force: true });
+    try {
+      if (activated) {
+        if (rotateBackup) replaceMacRollback(destination, displaced, recovery, paths.root);
+        else {
+          rmSync(displaced, { recursive: true, force: true });
+          rmSync(recovery, { recursive: true, force: true });
+        }
+      } else rmSync(recovery, { recursive: true, force: true });
+    } finally {
+      closeSync(lock); rmSync(lockPath, { force: true });
+    }
   }
 }
 

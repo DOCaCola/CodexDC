@@ -29,6 +29,7 @@ test("Store readiness clears independently of native update readiness", async ()
         appRoot: "C:\\store-apps\\OpenAI.Codex_1.0.0.0_x64__publisher\\app",
       }),
     };
+    if (name === "../updater-discovery.js") return require("../../runtime/platform/updater-discovery.js");
     if (name === "node:path") return path;
     if (name === "node:module") return moduleLoader;
     if (name === "electron") return { app: {}, dialog: {} };

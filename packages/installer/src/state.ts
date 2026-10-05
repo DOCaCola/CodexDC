@@ -12,6 +12,8 @@ export interface InstallerState {
   appRoot: string;
   managedCopy?: boolean;
   officialAppRoot?: string;
+  /** Verified publisher archive retained as the source for managed app repairs. */
+  downloadedAppRoot?: string;
   sourceAsarHash?: string;
   nodePath?: string;
   /** Hash of the original asar header (pre-patch). */

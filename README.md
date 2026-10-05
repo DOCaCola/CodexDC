@@ -90,8 +90,27 @@ Drafts and prereleases are excluded. Development checkouts use Git.
 There are no scheduled tasks, LaunchAgents or background maintenance services.
 
 Windows refreshes its managed copy from the installed Microsoft Store app.
-On macOS, update official Codex through its menu, close both apps and launch
-CodexDC. Launch checks also refresh the copy when the official app has changed.
+On macOS, CodexDC checks the publisher's update feed and shows updates through
+its integrated desktop notification. The update action downloads the full app
+archive while CodexDC stays open, verifies its Ed25519 signature and publisher
+identity, then asks the app to quit. A detached helper refreshes the managed copy
+and reopens it through Launch Services. Download failures leave the app open;
+repair failures reopen the previous copy and report the error. The official app
+is unchanged and need not be running.
+
+The active downloaded release is retained under `desktop-releases` only while
+needed as a repair source. When the official installation has the same build
+and archive, that redundant download is removed. Unused releases are pruned
+after a desktop window successfully loads; a pending verified update stays
+until it is applied or superseded.
+
+macOS keeps one last working desktop at `CodexDC.app.previous`, with matching
+runtime, launcher and installer state under `desktop-rollback`. Only a build
+that has successfully loaded a window can replace this recovery copy when
+installing a different build. Routine repairs and unsuccessful startups leave
+it intact. Temporary staging and recovery files are removed after installation.
+Startup selects the newer publisher source so an older official app cannot
+undo a managed update.
 
 Use Setup for safe mode, repair, logs and uninstall. User settings are retained
 unless explicitly removed. A previous binary does not undo data migrations.
