@@ -7,6 +7,7 @@
 
 import { ipcRenderer } from "electron";
 import { renderBackendSettings } from "./backend-settings";
+import { placeSettingsGroupsAfterPersonal } from "./settings-sidebar-order";
 import {
   metadataBadgeClass,
   settingsActionsClass,
@@ -369,8 +370,7 @@ function tryInject(): void {
     state.settingsSurfaceHideTimer = null;
   }
   setSettingsSurfaceVisible(true, "sidebar-found");
-  // The matched element is the scrolling list itself, not its flex-1 parent.
-  // Appending to the parent pins our group below the native settings list.
+  // Keep injected sections in the scrolling list alongside native groups.
   const outer = itemsGroup;
   state.sidebarRoot = outer;
 
@@ -711,6 +711,7 @@ function syncPagesGroup(): void {
     : pages.map((p) => `${p.id}|${p.page.title}|${p.page.iconSvg ?? ""}`).join("\n");
   const groupAttached = !!state.pagesGroup && outer.contains(state.pagesGroup);
   if (state.pagesGroupKey === desiredKey && (pages.length === 0 ? !groupAttached : groupAttached)) {
+    placeSettingsGroupsAfterPersonal(outer, state.navGroup, state.pagesGroup);
     return;
   }
 
@@ -721,6 +722,7 @@ function syncPagesGroup(): void {
     }
     for (const p of state.pages.values()) p.navButton = null;
     state.pagesGroupKey = desiredKey;
+    placeSettingsGroupsAfterPersonal(outer, state.navGroup, state.pagesGroup);
     return;
   }
 
@@ -750,6 +752,7 @@ function syncPagesGroup(): void {
     group.appendChild(btn);
   }
   state.pagesGroupKey = desiredKey;
+  placeSettingsGroupsAfterPersonal(outer, state.navGroup, state.pagesGroup);
   plog("pages group synced", {
     count: pages.length,
     ids: pages.map((p) => p.id),
