@@ -1,6 +1,6 @@
 {
   "name": "@codexdc/sdk",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Public types and helpers for codexdc tweak authors",
   "type": "module",
   "main": "dist/index.js",
