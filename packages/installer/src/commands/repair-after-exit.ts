@@ -1,13 +1,14 @@
 import { appendFileSync, existsSync } from "node:fs";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { ensureUserPaths } from "../paths.js";
 import { resolveWindowsExecutable } from "../platform.js";
 import { readState } from "../state.js";
 import { installNewStorePackage } from "../windows-store-update.js";
 import { backendEnvironment, backendState } from "../backend.js";
+import { launchWindowsDesktop } from "../windows-desktop-launch.js";
 import { repair } from "./repair.js";
 
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
@@ -68,16 +69,11 @@ export async function repairAfterExit(opts: RepairAfterExitOptions = {}): Promis
       throw new Error(`Patched Codex executable was not found: ${executable}`);
     }
 
-    const child = spawn(executable, [], {
-      cwd: dirname(executable),
-      detached: true,
-      env: {
-        ...backendEnvironment(backendState(), process.env),
-        ...(state.appUserModelId
-          ? { CODEXDC_APP_USER_MODEL_ID: state.appUserModelId }
-          : {}),
-      },
-      stdio: "ignore",
+    const child = launchWindowsDesktop(executable, [], {
+      ...backendEnvironment(backendState(), process.env),
+      ...(state.appUserModelId
+        ? { CODEXDC_APP_USER_MODEL_ID: state.appUserModelId }
+        : {}),
     });
     await waitForSuccessfulLaunch(child);
     child.unref();

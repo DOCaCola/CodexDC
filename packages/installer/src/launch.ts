@@ -7,6 +7,7 @@ import { readState } from "./state.js";
 import { resolveWindowsExecutable } from "./platform.js";
 import { maintainBeforeLaunch } from "./launch-maintenance.js";
 import { launchMacDesktop } from "./mac-desktop-launch.js";
+import { launchWindowsDesktop } from "./windows-desktop-launch.js";
 import { waitForProcessExit } from "./commands/repair-after-exit.js";
 
 export async function launchManaged(): Promise<void> {
@@ -41,12 +42,9 @@ export async function launchManaged(): Promise<void> {
     launchMacDesktop(state.appRoot, args, env);
     return;
   }
-  // Preserve the launcher's token when the user chooses Run as administrator.
-  // Chromium otherwise relaunches unelevated; this switch does not elevate a normal launch.
-  if (process.platform === "win32" && !args.includes("--do-not-de-elevate")) {
-    args.unshift("--do-not-de-elevate");
-  }
-  const child = spawn(executable, args, { env, cwd: dirname(executable), detached: true, stdio: "ignore" });
+  const child = process.platform === "win32"
+    ? launchWindowsDesktop(executable, args, env)
+    : spawn(executable, args, { env, cwd: dirname(executable), detached: true, stdio: "ignore" });
   await new Promise<void>((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
   child.unref();
 }
