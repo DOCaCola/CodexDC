@@ -19,8 +19,8 @@ test("Store readiness clears independently of native update readiness", async ()
   const loaded = {
     factory: Function(
       "state",
-      "return function(){ /* sparkleManager setSparkleBridgeHandlers */ return state; }",
-    )({ sparkleManager: manager }),
+      "return function(){ const { appUpdates, setSparkleBridgeHandlers } = state; return state; }",
+    )({ appUpdates: manager }),
   };
   const moduleLoader = { _load: () => loaded };
   const fakeRequire = Object.assign((name: string) => {
@@ -203,7 +203,7 @@ test("Windows update bridge rejects invalid broker process ids", async () => {
 
 test("Windows update bridge locates the updater singleton by semantic shape", () => {
   const sharedState = {
-    sparkleManager: {
+    appUpdates: {
       getIsUpdateReady() { return false; },
       installUpdatesIfAvailable() {},
     },
@@ -212,12 +212,12 @@ test("Windows update bridge locates the updater singleton by semantic shape", ()
     unrelated: () => null,
     currentMinifiedExport: Function(
       "state",
-      "return function(){ /* sparkleManager setSparkleBridgeHandlers */ return state; }",
+      "return function(){ const { appUpdates, setSparkleBridgeHandlers } = state; return state; }",
     )(sharedState),
   };
   assert.equal(bridge.__test.findUpdaterSharedState(exportsValue), sharedState);
   assert.equal(bridge.__test.isUpdaterModulePath(".vite\\build\\bootstrap-DwqRMhlU.js"), true);
-  assert.equal(bridge.__test.isUpdaterModulePath("window-all-closed-123.js"), true);
+  assert.equal(bridge.__test.isUpdaterModulePath("window-all-closed-123.js"), false);
   assert.equal(bridge.__test.isUpdaterModulePath("renderer-bootstrap-123.js"), false);
 });
 

@@ -89,6 +89,14 @@ function start(api) {
   const cli = path.join(state.sourceRoot, "packages/installer/dist/cli.js");
   const env = { ...process.env, CODEXDC_HOME: root };
   const showError = error => dialog.showMessageBox({ type: "error", message: "CodexDC update failed", detail: String(error), buttons: ["OK"] });
+  const unavailableReason = "Managed desktop updates are unavailable because CodexDC could not attach its update bridge. The publisher's in-place updater is disabled for this locally signed app. Update CodexDC and run Setup → Repair before trying again.";
+  let attachmentFailureReported = false;
+  const reportAttachmentFailure = () => {
+    if (attachmentFailureReported) return;
+    attachmentFailureReported = true;
+    api.log.warn(unavailableReason);
+    app.whenReady().then(() => dialog.showMessageBox({ type: "error", message: "CodexDC desktop updates unavailable", detail: unavailableReason, buttons: ["OK"] }));
+  };
   let startupConfirmed = false;
   let confirmingStartup = false;
   let desktopLoaded = false;
@@ -109,6 +117,7 @@ function start(api) {
     contents.once("did-finish-load", () => {
       if (!contents.getURL().startsWith("app://")) return;
       desktopLoaded = true;
+      if (!attached) reportAttachmentFailure();
       confirmStartup();
     });
   });
@@ -118,7 +127,7 @@ function start(api) {
     const shared = findUpdaterSharedState(loaded);
     if (!shared) return;
     attached = true;
-    const refresh = attachManager(shared.sparkleManager, {
+    const refresh = attachManager(shared.appUpdates, {
       check: () => new Promise((resolve, reject) => execFile(state.nodePath, [cli, "mac-update"],
         { env, timeout: 15000 }, (error, stdout, stderr) => {
           if (error) { reject(new Error(stderr || error.message)); return; }
@@ -149,6 +158,10 @@ function start(api) {
   }
   const original = Module._load;
   Module._load = function(request, parent, isMain) {
+    if (/(?:^|[/\\])sparkle\.node$/i.test(String(request))) {
+      reportAttachmentFailure();
+      throw new Error(unavailableReason);
+    }
     const loaded = original.apply(this, [request, parent, isMain]);
     if (isUpdaterModulePath(request)) inspect(loaded);
     return loaded;

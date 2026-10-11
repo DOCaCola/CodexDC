@@ -31,6 +31,9 @@ On each supported platform, using a separate test user:
 6. Install the DC fork CLI. Verify initialize, normal task creation, resume, tools,
    code mode and sandbox helpers. Switch back to Desktop bundled.
 7. Update official Codex, refresh the managed copy, then verify state and signing.
+   On macOS, verify the current desktop `appUpdates` manager is intercepted before
+   native Sparkle initializes. An unsupported desktop must report unavailable
+   managed updates and must not load the publisher's in-place updater.
 8. Update CodexDC from an older package. Test the older Setup entry point and
    pinned launcher after activation. Verify startup updates with the setting on and off. Test interrupted/failed update recovery.
 9. Uninstall CodexDC. Verify official Codex and retained user settings still work.

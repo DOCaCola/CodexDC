@@ -4,9 +4,9 @@ function isUpdaterManager(value) {
   return Boolean(
     value &&
       typeof value === "object" &&
-      value.sparkleManager &&
-      typeof value.sparkleManager.getIsUpdateReady === "function" &&
-      typeof value.sparkleManager.installUpdatesIfAvailable === "function",
+      value.appUpdates &&
+      typeof value.appUpdates.getIsUpdateReady === "function" &&
+      typeof value.appUpdates.installUpdatesIfAvailable === "function",
   );
 }
 
@@ -30,7 +30,7 @@ function findUpdaterSharedState(exportsValue) {
       }
       if (typeof factory !== "function") continue;
       const source = Function.prototype.toString.call(factory);
-      if (!source.includes("sparkleManager") || !source.includes("setSparkleBridgeHandlers")) {
+      if (!source.includes("appUpdates") || !source.includes("setSparkleBridgeHandlers")) {
         continue;
       }
       try {
@@ -45,7 +45,7 @@ function findUpdaterSharedState(exportsValue) {
 }
 
 function isUpdaterModulePath(value) {
-  return /(?:^|[/\\])(?:window-all-closed|bootstrap)-[^/\\]+\.js$/i.test(String(value));
+  return /(?:^|[/\\])bootstrap-[^/\\]+\.js$/i.test(String(value));
 }
 
 
