@@ -138,24 +138,40 @@ function installMainWorldFiberBridge(): void {
         ) {
           return undefined;
         }
-        if (Array.isArray(value)) {
-          return value.slice(0, 64).map((entry) => copyValue(entry, depth + 1, seen));
-        }
         if (typeof value !== "object" || seen.has(value)) {
           return undefined;
         }
-        if ("nodeType" in value) {
+
+        // Props can reference cross-origin WindowProxy objects through an
+        // ancestor's context. They cannot be inspected or serialized; omit the
+        // reference without discarding the other props and the owner chain.
+        let descriptors: Array<[string, PropertyDescriptor]>;
+        let arrayLength: number | null = null;
+        try {
+          if ("nodeType" in value) return undefined;
+          const array = Array.isArray(value);
+          arrayLength = array ? Math.min(value.length, 64) : null;
+          const keys = array
+            ? Array.from({ length: arrayLength! }, (_, index) => String(index))
+            : Object.keys(value).slice(0, 64);
+          descriptors = keys.flatMap(key => {
+            const descriptor = Object.getOwnPropertyDescriptor(value, key);
+            // Snapshot data only. Executing application getters can access
+            // frames or have side effects unrelated to the inspected row.
+            return descriptor && "value" in descriptor ? [[key, descriptor] as [string, PropertyDescriptor]] : [];
+          });
+        } catch {
           return undefined;
         }
 
         seen.add(value);
-        const copy: Record<string, unknown> = {};
-        for (const key of Object.keys(value).slice(0, 64)) {
+        const copy: Record<string, unknown> | unknown[] = arrayLength === null ? {} : Array(arrayLength);
+        for (const [key, descriptor] of descriptors) {
           if (key === "_owner" || key === "_store" || key === "ref") continue;
-          const child = (value as Record<string, unknown>)[key];
+          const child = descriptor.value;
           if (key === "children" && typeof child === "object") continue;
           const copied = copyValue(child, depth + 1, seen);
-          if (copied !== undefined) copy[key] = copied;
+          if (copied !== undefined) (copy as Record<string, unknown>)[key] = copied;
         }
         seen.delete(value);
         return copy;
