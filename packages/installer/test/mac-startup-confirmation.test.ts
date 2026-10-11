@@ -10,6 +10,7 @@ const realRequire = createRequire(import.meta.url);
 for (const nativePath of [path.posix, path.win32]) {
   test(`startup retention waits for a desktop window and confirms once (${nativePath.sep} paths)`, () => {
     const app = new EventEmitter();
+    Object.assign(app, { whenReady: () => new Promise<void>(resolveReady => app.once("ready", resolveReady)) });
     const calls: string[][] = [];
     const sourceRoot = nativePath.join(nativePath.sep, "source");
     const require = Object.assign((name: string) => {

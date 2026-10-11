@@ -269,7 +269,7 @@ function start(api) {
   };
 
   const patchSharedState = (sharedState) => {
-    const manager = sharedState?.sparkleManager;
+    const manager = sharedState.appUpdates;
     if (!manager || manager[PATCH_MARKER]) return;
 
     const original = {

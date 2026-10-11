@@ -6,14 +6,35 @@ import { join, resolve } from "node:path";
 import { extractPackage } from "../packages/installer/dist/releases.js";
 
 const stage = mkdtempSync(join(tmpdir(), "CodexDC package with spaces "));
+const profile = mkdtempSync(join(tmpdir(), "CodexDC profile with spaces "));
 try {
   const archive = resolve("dist", `CodexDC-${process.platform}-${process.arch}.${process.platform === "win32" ? "zip" : "tar.gz"}`);
   await extractPackage(archive, stage);
   const node = join(stage, "node", process.platform === "win32" ? "node.exe" : "node");
   const cli = join(stage, "packages", "installer", "dist", "cli.js");
-  const options = { cwd: tmpdir(), encoding: "utf8", env: { ...process.env, CODEXDC_HOME: join(stage, "smoke-home") } };
+  const options = { cwd: tmpdir(), encoding: "utf8", env: { ...process.env, CODEXDC_HOME: profile } };
   mkdirSync(options.env.CODEXDC_HOME, { recursive: true });
   execFileSync(node, [cli, "--help"], options);
+  const installModule = join(stage, "packages", "installer", "dist", "commands", "install.js");
+  const runtime = join(options.env.CODEXDC_HOME, "runtime");
+  execFileSync(node, ["--input-type=module", "-e", `
+    import assert from "node:assert/strict";
+    import { createRequire } from "node:module";
+    import { join } from "node:path";
+    import { pathToFileURL } from "node:url";
+    const require = createRequire(import.meta.url);
+    const { stageAssets } = await import(pathToFileURL(process.argv[1]));
+    stageAssets(process.argv[2]);
+    const { findUpdaterSharedState } = require(join(process.argv[2], "platform", "updater-discovery.js"));
+    const { attachManager } = require(join(process.argv[2], "platform", "macos", "index.js"));
+    const manager = { getIsUpdateReady: () => false, installUpdatesIfAvailable() {} };
+    const state = { appUpdates: manager, setSparkleBridgeHandlers() {} };
+    const factory = () => { const { appUpdates, setSparkleBridgeHandlers } = state; return state; };
+    assert.equal(findUpdaterSharedState({ I: factory }), state);
+    attachManager(state.appUpdates, {});
+    assert.equal(manager.hasUpdater(), true);
+    assert.equal(manager.getUnavailableReason(), null);
+  `, installModule, runtime], options);
   // Exercise the updater from the extracted release, without requesting an update.
   const storeUpdateModule = join(stage, "packages", "installer", "dist", "windows-store-update.js");
   execFileSync(node, ["--input-type=module", "-e", `
@@ -69,7 +90,8 @@ try {
     ...options, env: { ...options.env, CODEXDC_ACTIVATING: "1" },
   }));
   assert.deepEqual(candidate, { provider: "fork" });
-  console.log("Extracted package passed: bundled runtime, repeated launch forwarding, and candidate activation bypass.");
+  console.log("Extracted package passed: bundled runtime, current updater bridge, repeated launch forwarding, and candidate activation bypass.");
 } finally {
   rmSync(stage, { recursive: true, force: true });
+  rmSync(profile, { recursive: true, force: true });
 }
