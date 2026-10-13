@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
 import { removeWindowsStoreMirror } from "../windows-store-mirror-retention.js";
 import { getIntegrity } from "../integrity.js";
 import { installCliShims } from "../cli-shim.js";
+import { officialWindowsStartupTasks } from "../windows-startup.js";
 
 interface Opts {
   app?: string;
@@ -220,6 +221,7 @@ export async function repair(opts: Opts = {}): Promise<void> {
 }
 
 function refreshEntrypoints(binDir: string, codex: ReturnType<typeof resolveManagedCodexInstall>): void {
+  officialWindowsStartupTasks(codex, true);
   installCliShims(binDir);
   installWindowsManagedAppLauncher(codex);
 }

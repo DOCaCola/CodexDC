@@ -6,6 +6,7 @@ import { verifySignature } from "../codesign.js";
 import { existsSync, accessSync, constants } from "node:fs";
 import { resolveManagedCodexInstall } from "../codex-target.js";
 import { getIntegrity } from "../integrity.js";
+import { officialWindowsStartupCheck, officialWindowsStartupTasks } from "../windows-startup.js";
 
 interface Check {
   name: string;
@@ -53,6 +54,14 @@ export async function doctor(): Promise<void> {
     });
     print(checks);
     return;
+  }
+
+  if (codex.platform === "win32") {
+    try {
+      checks.push({ name: "official app startup", ...officialWindowsStartupCheck(officialWindowsStartupTasks(codex)) });
+    } catch (error) {
+      checks.push({ name: "official app startup", ok: false, detail: error instanceof Error ? error.message : String(error) });
+    }
   }
 
   if (existsSync(codex.asarPath)) {
@@ -129,9 +138,10 @@ function print(checks: Check[]): void {
     console.log(`  ${mark} ${c.name.padEnd(24)} ${kleur.dim(c.detail)}`);
   }
   const failed = checks.filter((c) => c.ok === false).length;
+  const warnings = checks.filter((c) => c.ok === "warn").length;
   console.log();
   if (failed === 0) {
-    console.log(kleur.green("All checks passed."));
+    console.log(warnings ? kleur.yellow(`${warnings} warning(s); review the checks above.`) : kleur.green("All checks passed."));
   } else {
     console.log(kleur.red(`${failed} check(s) failed.`));
     process.exitCode = 1;

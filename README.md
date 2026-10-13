@@ -26,6 +26,11 @@ Extract the complete package into a permanent folder, then run:
 The guided setup bundles Node; no Git, npm or compiler is needed. Choose
 **Install a separate patched desktop**, then **Launch CodexDC**.
 Windows currently supports the official Microsoft Store installation.
+Windows installation and repair disable the official Store app's automatic startup
+for the current user to prevent it intercepting CodexDC's first launch after login.
+`codexdc doctor` checks this setting and reports startup tasks enabled again,
+including tasks controlled by policy. Disable policy-controlled startup through
+your administrator. The official app can still be opened manually.
 macOS creates `~/Applications/CodexDC.app` with its own identity and local signer.
 A fresh login or permission grant may be needed. Simultaneous use of both desktop
 variants is not supported until backend data/lock compatibility is verified.
