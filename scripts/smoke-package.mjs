@@ -55,6 +55,30 @@ try {
     const updater = await import(pathToFileURL(process.argv[1]).href);
     assert.equal(updater.startStoreUpdate("OpenAI.Codex_2p2nqsd0c76g0"), true);
   `, storeUpdateModule], options);
+  // Startup maintenance must resolve its helper from an extracted release too.
+  execFileSync(node, ["--input-type=module", "-e", `
+    import assert from "node:assert/strict";
+    import childProcess from "node:child_process";
+    import { readFileSync } from "node:fs";
+    import { syncBuiltinESMExports } from "node:module";
+    import { join } from "node:path";
+    import { pathToFileURL } from "node:url";
+    childProcess.execFileSync = (file, args) => {
+      assert.equal(file, "powershell.exe");
+      const scriptIndex = args.indexOf("-File") + 1;
+      assert.match(readFileSync(args[scriptIndex], "utf8"), /windows.startupTask/);
+      assert.deepEqual(args.slice(scriptIndex + 1), [
+        "-PackageFamily", "OpenAI.Codex_2p2nqsd0c76g0", "-Mode", "disable",
+      ]);
+      return '[{"taskId":"App","state":1,"changed":true}]';
+    };
+    syncBuiltinESMExports();
+    const startup = await import(pathToFileURL(process.argv[1]).href);
+    assert.deepEqual(startup.officialWindowsStartupTasks({
+      platform: "win32",
+      appRoot: join(process.cwd(), "codex-dc", "store-apps", "OpenAI.Codex_26.1007.2314.0_x64__2p2nqsd0c76g0", "app"),
+    }, true), [{ taskId: "App", state: 1, changed: true }]);
+  `, join(stage, "packages", "installer", "dist", "windows-startup.js")], options);
   assert.deepEqual(JSON.parse(execFileSync(node, [cli, "backend", "status"], options)), { provider: "fork" });
   const tweak = join(stage, "development tweak");
   mkdirSync(tweak);

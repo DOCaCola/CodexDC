@@ -32,6 +32,7 @@ import { chownForTargetUser } from "../ownership.js";
 import { getOpenReport, type OpenReport } from "./debug.js";
 import { openCodex, quitCodex } from "../alerts.js";
 import { managedStorePackageRoot, pruneWindowsStoreMirrors } from "../windows-store-mirror-retention.js";
+import { officialWindowsStartupTasks } from "../windows-startup.js";
 
 interface Opts {
   app?: string;
@@ -76,6 +77,13 @@ export async function install(opts: Opts = {}): Promise<void> {
     integrityUpdate: integrityPlan !== null,
   });
   step.detail("Bundle writable");
+
+  if (codex.platform === "win32") {
+    const startupTasks = officialWindowsStartupTasks(codex, true);
+    step(startupTasks.some(task => task.changed)
+      ? "Disabled official Store app automatic startup to prevent first-launch conflicts"
+      : "Official Store app automatic startup checked");
+  }
 
   let preparedSigning: ReturnType<typeof prepareCodeSigning> = null;
   if (resign && codex.platform === "darwin") {
