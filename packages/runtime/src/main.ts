@@ -17,6 +17,7 @@ import chokidar from "chokidar";
 import { selectTweakSource } from "./store-source";
 import * as tar from "tar";
 import { discoverTweaks, type DiscoveredTweak } from "./tweak-discovery";
+import { installedTweakSource, pullDevelopmentCheckout, STORE_INSTALL_METADATA_FILE } from "./tweak-install-source";
 import { createDiskStorage, type DiskStorage } from "./storage";
 import { syncManagedMcpServers } from "./mcp-sync";
 import {
@@ -676,14 +677,19 @@ ipcMain.handle("codexpp:get-tweak-store", async () => {
       const local = installed.get(entry.id);
       const platform = storeEntryPlatformCompatibility(entry);
       const runtime = storeEntryRuntimeCompatibility(entry);
+      const source = local ? installedTweakSource(local.dir) : null;
+      const versionOrder = local ? compareVersions(entry.manifest.version, local.manifest.version) : 0;
       return {
         ...entry,
         platform,
         runtime,
-        installed: local
+        installed: local && source
           ? {
               version: local.manifest.version,
               enabled: isTweakEnabled(local.manifest.id),
+              source: source.kind,
+              checkout: source.kind === "development" ? source.checkout : null,
+              status: versionOrder > 0 ? "update" : versionOrder < 0 ? "ahead" : "current",
             }
           : null,
       };
@@ -700,6 +706,21 @@ ipcMain.handle("codexpp:install-store-tweak", async (_e, id: string) => {
   await installStoreTweak(entry);
   reloadTweaks("store-install", tweakLifecycleDeps);
   return { installed: entry.id };
+});
+
+ipcMain.handle("codexpp:pull-development-tweak", async (_e, id: string) => {
+  const tweak = tweakState.discovered.find((t) => t.manifest.id === id);
+  if (!tweak) throw new Error(`Tweak is not installed: ${id}`);
+  const source = installedTweakSource(tweak.dir);
+  if (source.kind !== "development") {
+    throw new Error(`${tweak.manifest.name} is not linked to a development checkout.`);
+  }
+  log("info", `pulling development checkout for ${id}: ${source.checkout}`);
+  const result = await pullDevelopmentCheckout(source.checkout);
+  log("info", `pulled ${source.checkout} from ${result.upstream}: ${result.before} -> ${result.after}`);
+  reloadTweaks("development-pull", tweakLifecycleDeps);
+  const version = tweakState.discovered.find((t) => t.manifest.id === id)?.manifest.version ?? null;
+  return { ...result, version };
 });
 
 ipcMain.handle("codexpp:prepare-tweak-store-submission", async (_e, repoInput: string) => {
@@ -1317,6 +1338,7 @@ async function installStoreTweak(entry: TweakStoreEntry): Promise<void> {
   const archive = join(work, "source.tar.gz");
   const extractDir = join(work, "extract");
   const existing = tweakState.discovered.find((t) => t.manifest.id === entry.id);
+  if (existing) assertStoreOwnsTweak(existing);
   const target = existing?.dir ?? join(TWEAKS_DIR, entry.id);
   const stagedTarget = join(work, "staged", entry.id);
 
@@ -1338,7 +1360,7 @@ async function installStoreTweak(entry: TweakStoreEntry): Promise<void> {
     copyTweakSource(source, stagedTarget);
     const stagedFiles = hashTweakSource(stagedTarget);
     writeFileSync(
-      join(stagedTarget, ".codexpp-store.json"),
+      join(stagedTarget, STORE_INSTALL_METADATA_FILE),
       JSON.stringify(
         {
           repo: entry.repo,
@@ -1366,6 +1388,20 @@ async function installStoreTweak(entry: TweakStoreEntry): Promise<void> {
     } finally { rmSync(activation, { recursive: true, force: true }); }
   } finally {
     rmSync(work, { recursive: true, force: true });
+  }
+}
+
+function assertStoreOwnsTweak(tweak: DiscoveredTweak): void {
+  const source = installedTweakSource(tweak.dir);
+  if (source.kind === "development") {
+    throw new Error(
+      `${tweak.manifest.name} is linked to your development checkout at ${source.checkout}. Use Pull from upstream to update it.`,
+    );
+  }
+  if (source.kind === "manual") {
+    throw new Error(
+      `${tweak.manifest.name} was installed manually, so the Store can't replace it. Remove ${tweak.dir}, then install it from the Store.`,
+    );
   }
 }
 
@@ -1482,7 +1518,7 @@ async function assertStoreTweakCleanForAutoUpdate(
 }
 
 function readStoreInstallMetadata(target: string): StoreInstallMetadata | null {
-  const metadataPath = join(target, ".codexpp-store.json");
+  const metadataPath = join(target, STORE_INSTALL_METADATA_FILE);
   if (!existsSync(metadataPath)) return null;
   try {
     const parsed = JSON.parse(readFileSync(metadataPath, "utf8")) as Partial<StoreInstallMetadata>;
@@ -1527,7 +1563,7 @@ function hashTweakSource(root: string): Record<string, string> {
 
 function collectTweakFileHashes(root: string, dir: string, out: Record<string, string>): void {
   for (const name of readdirSync(dir).sort()) {
-    if (name === ".git" || name === "node_modules" || name === ".codexpp-store.json") continue;
+    if (name === ".git" || name === "node_modules" || name === STORE_INSTALL_METADATA_FILE) continue;
     const full = join(dir, name);
     const rel = relative(root, full).split("\\").join("/");
     const stat = statSync(full);

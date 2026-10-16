@@ -115,6 +115,9 @@ interface TweakStoreEntryView extends TweakStoreEntry {
   installed: {
     version: string;
     enabled: boolean;
+    source: "store" | "development" | "manual";
+    checkout: string | null;
+    status: "update" | "current" | "ahead";
   } | null;
   platform?: {
     current: string;
@@ -1619,9 +1622,18 @@ function tweakStoreCard(entry: TweakStoreEntryView): HTMLElement {
       }),
     );
   }
-  const hasUpdate = !!entry.installed && entry.installed.version !== entry.manifest.version;
-  if (entry.installed && !hasUpdate) {
-    actions.appendChild(storeStatusPill("Installed"));
+  const installed = entry.installed;
+  const hasUpdate = installed?.status === "update";
+  if (installed?.source === "development") {
+    appendDevelopmentStoreActions(entry, installed, card, versions, actions);
+  } else if (installed?.source === "manual" && hasUpdate) {
+    actions.appendChild(storeStatusPill("Installed manually"));
+    showStoreCardMessage(
+      card,
+      `Store v${entry.manifest.version} is available. This copy was installed manually; remove it from the Codex-DC tweaks folder, then install it here to receive Store updates.`,
+    );
+  } else if (installed && !hasUpdate) {
+    actions.appendChild(storeStatusPill(installed.status === "ahead" ? "Newer than Store" : "Installed"));
   } else if (entry.platform && !entry.platform.compatible) {
     card.classList.add("opacity-70");
     actions.appendChild(storeStatusPill(platformLockedLabel(entry.platform)));
@@ -1657,6 +1669,51 @@ function tweakStoreCard(entry: TweakStoreEntryView): HTMLElement {
     actions.appendChild(installButton);
   }
   return card;
+}
+
+function appendDevelopmentStoreActions(
+  entry: TweakStoreEntryView,
+  installed: NonNullable<TweakStoreEntryView["installed"]>,
+  card: HTMLElement,
+  versions: HTMLElement,
+  actions: HTMLElement,
+): void {
+  const linked = storeStatusPill("Development link");
+  linked.title = `Linked to ${installed.checkout}. Git manages updates for this tweak.`;
+  if (installed.status !== "update") {
+    actions.appendChild(linked);
+    return;
+  }
+  actions.appendChild(storeStatusPill("Update available", "info"));
+  const pullButton = storeInstallButton("Pull from upstream", (button) => {
+    const grid = card.closest("[data-codexpp-store-grid]") as HTMLElement | null;
+    const source = grid?.parentElement?.querySelector("[data-codexpp-store-source]") as HTMLElement | null;
+    showStoreButtonLoading(button, "Pulling");
+    actions.querySelectorAll("button").forEach((button) => (button.disabled = true));
+    void ipcRenderer
+      .invoke("codexpp:pull-development-tweak", entry.id)
+      .then((result) => {
+        const { version, before, after, upstream } = result as {
+          version: string | null; before: string; after: string; upstream: string;
+        };
+        if (before === after) {
+          showStoreCardMessage(card, `${installed.checkout} already matches ${upstream}.`);
+        } else {
+          showStoreCardMessage(card, `Pulled ${upstream} into ${installed.checkout}.`);
+        }
+        if (version) versions.replaceChildren(tweakStoreVersionBadge(entry, version));
+        setTimeout(() => {
+          if (grid && source) refreshTweakStoreGrid(grid, source);
+        }, 900);
+      })
+      .catch((e) => {
+        resetStoreInstallButton(button, "Pull from upstream");
+        actions.querySelectorAll("button").forEach((button) => (button.disabled = false));
+        showStoreCardMessage(card, String((e as Error).message ?? e));
+      });
+  });
+  pullButton.title = `Run git pull --rebase in ${installed.checkout}`;
+  actions.appendChild(pullButton);
 }
 
 function platformLockedLabel(platform: NonNullable<TweakStoreEntryView["platform"]>): string {
@@ -1911,7 +1968,7 @@ function currentStoreUpdateBadgeCount(): number {
 }
 
 function outdatedInstalledStoreCount(entries: TweakStoreEntryView[]): number {
-  return entries.filter((entry) => !!entry.installed && entry.installed.version !== entry.manifest.version).length;
+  return entries.filter((entry) => entry.installed?.status === "update").length;
 }
 
 function storeToolbarButton(
@@ -1960,16 +2017,16 @@ function verifiedSafeBadge(): HTMLElement {
 function tweakStoreVersionBadge(entry: TweakStoreEntryView, installedOverride?: string): HTMLElement {
   const installed = installedOverride ?? entry.installed?.version ?? null;
   const latest = entry.manifest.version;
-  const hasUpdate = !!installed && installed !== latest;
+  const hasUpdate = installedOverride === undefined && entry.installed?.status === "update";
   const badge = storeVersionBadgeShell(hasUpdate);
   const label = document.createElement("span");
   label.className = "truncate";
   label.textContent = installed
-    ? `Installed v${installed} · Latest v${latest}`
-    : `Latest v${latest}`;
+    ? `Installed v${installed} · Store v${latest}`
+    : `Store v${latest}`;
   badge.title = installed
-    ? `Installed version ${installed}. Latest approved version ${latest}.`
-    : `Latest approved version ${latest}.`;
+    ? `Installed version ${installed}. Approved Store version ${latest}.`
+    : `Approved Store version ${latest}.`;
   badge.appendChild(label);
   return badge;
 }
