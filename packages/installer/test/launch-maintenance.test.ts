@@ -14,6 +14,7 @@ function fixture() {
     update: async (): Promise<string | undefined> => { calls.push("update"); return undefined; },
     repair: async (force: boolean) => { calls.push(`repair:${force}`); },
     updateBackend: async () => { calls.push("backend"); },
+    log: (message: string) => { calls.push(`log:${message}`); },
     report: (error: unknown) => { calls.push(`report:${String(error)}`); },
   };
   return { calls, state, services };
@@ -29,7 +30,7 @@ test("opening an already-running desktop does not update or repair it", async ()
   const f = fixture();
   f.services.isRunning = () => true;
   await maintainBeforeLaunch(true, f.services);
-  assert.deepEqual(f.calls, []);
+  assert.deepEqual(f.calls, ["log:CodexDC is already running; skipping update and repair checks."]);
 });
 
 test("successful update hands launch to the new package without repairing through the old package", async () => {

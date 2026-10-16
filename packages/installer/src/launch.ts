@@ -1,7 +1,8 @@
 import { spawn, execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { backendEnvironment, prepareBackend } from "./backend.js";
+import kleur from "kleur";
+import { backendEnvironment, prepareBackend, type BackendState } from "./backend.js";
 import { userPaths } from "./paths.js";
 import { readState } from "./state.js";
 import { resolveWindowsExecutable } from "./platform.js";
@@ -9,8 +10,10 @@ import { maintainBeforeLaunch } from "./launch-maintenance.js";
 import { launchMacDesktop } from "./mac-desktop-launch.js";
 import { launchWindowsDesktop } from "./windows-desktop-launch.js";
 import { waitForProcessExit } from "./commands/repair-after-exit.js";
+import { CODEXDC_VERSION } from "./version.js";
 
 export async function launchManaged(): Promise<void> {
+  console.log(kleur.bold(`CodexDC ${CODEXDC_VERSION}`));
   if (process.platform === "darwin" && process.env.CODEXDC_LAUNCH_PARENT !== undefined) {
     const pid = Number(process.env.CODEXDC_LAUNCH_PARENT);
     if (!Number.isSafeInteger(pid) || pid <= 0 || pid === process.pid) throw new Error("Invalid launch parent process id");
@@ -27,7 +30,9 @@ export async function launchManaged(): Promise<void> {
   const paths = userPaths();
   const state = readState(paths.stateFile);
   if (!state) throw new Error("Install CodexDC first.");
-  const env = backendEnvironment(await prepareBackend(), process.env);
+  const backend = await prepareBackend();
+  console.log(`CLI backend: ${describeBackend(backend)}`);
+  const env = backendEnvironment(backend, process.env);
   const executable = process.platform === "darwin"
     ? join(state.appRoot, "Contents", "MacOS", JSON.parse(readFileSync(
       join(state.appRoot, "Contents", "Resources", "codexdc-launch.json"), "utf8")).originalExecutable)
@@ -38,6 +43,7 @@ export async function launchManaged(): Promise<void> {
   if (!Array.isArray(args) || !args.every((arg) => typeof arg === "string")) throw new Error("Invalid desktop launch arguments");
   delete env.CODEXDC_DESKTOP_ARGS;
   delete env.CODEXDC_LAUNCH_CHECKED;
+  console.log(`Starting desktop${state.codexVersion ? ` (Codex ${state.codexVersion})` : ""}: ${state.appRoot}`);
   if (process.platform === "darwin") {
     launchMacDesktop(state.appRoot, args, env);
     return;
@@ -47,4 +53,12 @@ export async function launchManaged(): Promise<void> {
     : spawn(executable, args, { env, cwd: dirname(executable), detached: true, stdio: "ignore" });
   await new Promise<void>((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
   child.unref();
+}
+
+function describeBackend(state: BackendState): string {
+  switch (state.provider) {
+    case "fork": return `DC fork ${state.installed!.tag}`;
+    case "bundled": return "desktop bundled";
+    case "development": return `local ${state.development!.executable} (${state.development!.version})`;
+  }
 }

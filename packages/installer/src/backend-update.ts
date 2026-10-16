@@ -5,7 +5,7 @@ import { existsSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 
-const services = { latestRelease, installBackend, now: Date.now, report: console.warn };
+const services = { latestRelease, installBackend, now: Date.now, log: console.log, report: console.warn };
 
 function releaseVersion(tag: string): number[] {
   const match = /^doca-v(\d+)\.(\d+)\.(\d+)-doca(?:\.(\d+))?$/.exec(tag);
@@ -26,7 +26,10 @@ export async function updateBackendBeforeLaunch(root = userPaths().root, deps = 
     const current = releaseVersion(state.installed.tag);
     const candidate = releaseVersion(release.tag_name);
     const difference = candidate.map((part, index) => part - current[index]).find((part) => part !== 0) ?? 0;
-    if (difference > 0) await deps.installBackend(root, release);
+    if (difference > 0) {
+      deps.log(`Updating DC fork CLI ${state.installed.tag} -> ${release.tag_name}...`);
+      await deps.installBackend(root, release);
+    }
   } catch (error) {
     updateCheck.error = String(error);
     deps.report(`CLI update was not applied; keeping the installed backend: ${String(error)}`);
