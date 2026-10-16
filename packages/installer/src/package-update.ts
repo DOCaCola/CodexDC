@@ -41,8 +41,15 @@ export async function updatePackageFrom(
   }
   const config = existsSync(paths.configFile) ? JSON.parse(readFileSync(paths.configFile, "utf8")) : {};
   const lastCheck = readSelfUpdateState(paths.selfUpdateStateFile);
-  if (opts.onLaunch && (config.codexPlusPlus?.autoUpdate === false ||
-      (lastCheck && Date.now() - Date.parse(lastCheck.checkedAt) < 60 * 60_000))) return;
+  if (opts.onLaunch && config.codexPlusPlus?.autoUpdate === false) {
+    if (!opts.quiet) console.log("CodexDC auto-update is off.");
+    return;
+  }
+  const sinceLastCheck = lastCheck ? Date.now() - Date.parse(lastCheck.checkedAt) : Infinity;
+  if (opts.onLaunch && sinceLastCheck < 60 * 60_000) {
+    if (!opts.quiet) console.log(`CodexDC update check skipped; last checked ${Math.floor(sinceLastCheck / 60_000)} min ago.`);
+    return;
+  }
   const oldInstall = readState(paths.stateFile);
   if (oldInstall && services.isCodexRunning(oldInstall.appRoot)) {
     if (opts.onLaunch) return;
@@ -53,14 +60,18 @@ export async function updatePackageFrom(
   writeSelfUpdateState(paths.selfUpdateStateFile, diagnostic);
   const work = mkdtempSync(join(paths.root, ".update-"));
   try {
+    if (!opts.quiet) console.log("Checking for CodexDC updates...");
     const release = await services.latestRelease("DOCaCola/CodexDC");
     diagnostic.targetRef = release.tag_name;
     diagnostic.releaseUrl = release.html_url;
     diagnostic.latestVersion = release.tag_name.replace(/^v/, "");
     if (!/^\d+\.\d+\.\d+$/.test(diagnostic.latestVersion)) throw new Error("Invalid stable release version");
     if (!opts.force && compareSemver(diagnostic.latestVersion, CODEXDC_VERSION) <= 0) {
-      diagnostic.status = "up-to-date"; return;
+      diagnostic.status = "up-to-date";
+      if (!opts.quiet) console.log("No CodexDC update available.");
+      return;
     }
+    if (!opts.quiet) console.log(`Downloading CodexDC ${diagnostic.latestVersion}...`);
     const name = `CodexDC-${process.platform}-${process.arch}.${process.platform === "win32" ? "zip" : "tar.gz"}`;
     const asset = releaseAsset(release, name);
     const sum = expectedChecksum((await services.downloadReleaseAsset("DOCaCola/CodexDC", releaseAsset(release, "SHA256SUMS"))).toString(), name);
@@ -78,6 +89,7 @@ export async function updatePackageFrom(
     // Candidate validation/repair must run the candidate even while the old
     // active-package selector still points to the previous version.
     const activationEnv = { ...process.env, CODEXDC_HOME: paths.root, CODEXDC_ACTIVATING: "1" };
+    if (!opts.quiet) console.log(`Activating CodexDC ${manifest.version}...`);
     services.runCli(node, [cli, "--help"], next, activationEnv);
     if (oldInstall) {
       cpSync(paths.runtime, join(work, "old-runtime"), { recursive: true });

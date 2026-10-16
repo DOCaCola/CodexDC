@@ -89,6 +89,10 @@ An already-running desktop is left alone. A download failure is recorded in
 `log/launch-update.log` and the installed version can still launch; a failed
 recovery stops launch and reports the problem.
 
+Launching prints each step: the update check, patch repair, selected CLI
+backend and the desktop being started. On macOS, launches from Finder or the
+Dock write the same output to `log/launch.log`.
+
 Turn **Update CodexDC on launch** off in Settings to disable automatic patcher
 updates. Manual updates remain available through **Setup → Update CodexDC**.
 Drafts and prereleases are excluded. Development checkouts use Git.

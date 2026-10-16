@@ -32,9 +32,14 @@ const MAX_LOG_BYTES = 10 * 1024 * 1024;
 // Maintenance waits for this first host to exit before refreshing the app.
 if (process.platform === "darwin" && process.env.CODEXDC_DESKTOP_READY !== "1") {
   const launch = JSON.parse(fs.readFileSync(path.join(process.resourcesPath, "codexdc-launch.json"), "utf8"));
+  // Finder launches have no terminal; keep the maintenance output inspectable.
+  const logDir = path.join(userRoot, "log");
+  fs.mkdirSync(logDir, { recursive: true });
+  const output = fs.openSync(path.join(logDir, "launch.log"), "a");
+  fs.writeSync(output, `\n[${new Date().toISOString()}] launch\n`);
   const child = require("node:child_process").spawn(launch.maintenanceNode, [launch.maintenanceCli, "launch"], {
     detached: true,
-    stdio: "ignore",
+    stdio: ["ignore", output, output],
     env: {
       ...process.env,
       CODEXDC_HOME: userRoot,
@@ -43,10 +48,12 @@ if (process.platform === "darwin" && process.env.CODEXDC_DESKTOP_READY !== "1") 
     },
   });
   child.once("error", (error) => {
+    fs.closeSync(output);
     process.stderr.write(`[codexdc] Could not start launch maintenance: ${error.message}\n`);
     process.exit(1);
   });
   child.once("spawn", () => {
+    fs.closeSync(output);
     child.unref();
     process.exit(0);
   });

@@ -13,6 +13,8 @@ function run(platform: string, ready?: string) {
   const calls: unknown[][] = [];
   const exits: number[] = [];
   const errors: string[] = [];
+  const logWrites: string[] = [];
+  const closed: number[] = [];
   const process = {
     platform, env: { CODEXDC_DESKTOP_READY: ready }, pid: 123,
     resourcesPath: "/app/Resources", argv: ["/app/ChatGPT", "--example"],
@@ -21,7 +23,13 @@ function run(platform: string, ready?: string) {
   const require = (id: string) => {
     switch (id) {
       case "node:path": return path;
-      case "node:fs": return { readFileSync: () => JSON.stringify({ maintenanceNode: "/node", maintenanceCli: "/cli" }) };
+      case "node:fs": return {
+        readFileSync: () => JSON.stringify({ maintenanceNode: "/node", maintenanceCli: "/cli" }),
+        mkdirSync: () => {},
+        openSync: (file: string, flags: string) => { logWrites.push(`${flags} ${file}`); return 7; },
+        writeSync: (_fd: number, text: string) => { logWrites.push(text); },
+        closeSync: (fd: number) => { closed.push(fd); },
+      };
       case "node:module": return {};
       case "./package.json": return { __codexpp: { userRoot: "/profile" } };
       case "node:child_process": return { spawn: (...args: unknown[]) => { calls.push(args); return child; } };
@@ -29,18 +37,21 @@ function run(platform: string, ready?: string) {
     }
   };
   const continued = compileFunction(source + "\nreturn true;", ["require", "process"])(require, process);
-  return { child, calls, exits, errors, process, continued, unreferenced: () => unreferenced };
+  return { child, calls, exits, errors, logWrites, closed, process, continued, unreferenced: () => unreferenced };
 }
-test("Finder launch hands off arguments and parent pid before loading desktop", () => {
+test("Finder launch hands off arguments and parent pid with output in the launch log", () => {
   const r = run("darwin");
   assert.equal(r.continued, undefined);
   assert.deepEqual(r.calls, [["/node", ["/cli", "launch"], {
-    detached: true, stdio: "ignore", env: {
+    detached: true, stdio: ["ignore", 7, 7], env: {
       CODEXDC_DESKTOP_READY: undefined, CODEXDC_HOME: "/profile", CODEXDC_LAUNCH_PARENT: "123",
       CODEXDC_DESKTOP_ARGS: '["--example"]',
     },
   }]]);
+  assert.equal(r.logWrites[0], `a ${path.join("/profile", "log", "launch.log")}`);
+  assert.match(r.logWrites[1]!, /\] launch\n$/);
   r.child.emit("spawn");
+  assert.deepEqual(r.closed, [7]);
   assert.deepEqual(r.exits, [0]);
   assert.equal(r.unreferenced(), true);
 });

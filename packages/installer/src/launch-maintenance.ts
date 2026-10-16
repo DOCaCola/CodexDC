@@ -11,9 +11,10 @@ import { updateBackendBeforeLaunch } from "./backend-update.js";
 const maintenance = {
   readInstall: () => readState(ensureUserPaths().stateFile),
   isRunning: isCodexRunning,
-  update: () => updatePackage({ onLaunch: true, quiet: true }),
-  repair: (force: boolean) => repair({ force, quiet: true }),
+  update: () => updatePackage({ onLaunch: true }),
+  repair: (force: boolean) => repair({ force }),
   updateBackend: updateBackendBeforeLaunch,
+  log: console.log,
   report: (error: unknown) => {
     const message = `Patcher update was not applied: ${String(error)}`;
     console.warn(message);
@@ -28,7 +29,10 @@ export async function maintainBeforeLaunch(
 ): Promise<string | undefined> {
   const state = services.readInstall();
   if (!state) throw new Error("Install CodexDC first.");
-  if (services.isRunning(state.appRoot)) return;
+  if (services.isRunning(state.appRoot)) {
+    services.log("CodexDC is already running; skipping update and repair checks.");
+    return;
+  }
   if (checkForUpdate) {
     try {
       const next = await services.update();

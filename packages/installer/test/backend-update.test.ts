@@ -30,6 +30,7 @@ function fixture(t: test.TestContext) {
       return state;
     },
     now: () => Date.UTC(2026, 8, 26),
+    log: () => {},
     report: (message: string) => { reports.push(message); },
   };
   return { root, initial, save, services, release, reports, counts: () => [checks, installs] };

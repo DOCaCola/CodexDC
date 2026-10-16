@@ -32,7 +32,10 @@ export async function installManagedMac(opts: { app?: string; downloadedSource?:
   const sourceHash = readHeaderHash(source.asarPath).headerHash;
   if (!opts.force && previous?.sourceRoot === resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..") &&
       previous?.sourceAsarHash === sourceHash && existsSync(previous.appRoot) &&
-      readHeaderHash(join(previous.appRoot, "Contents", "Resources", "app.asar")).headerHash === previous.patchedAsarHash) return;
+      readHeaderHash(join(previous.appRoot, "Contents", "Resources", "app.asar")).headerHash === previous.patchedAsarHash) {
+    if (!opts.quiet) console.log("Patch already intact.");
+    return;
+  }
   const destination = previous?.managedCopy ? previous.appRoot : join(homedir(), "Applications", "CodexDC.app");
   if (existsSync(destination) && !previous?.managedCopy) throw new Error(`${destination} already exists and is not owned by CodexDC.`);
   if (existsSync(destination) && isCodexRunning(destination)) throw new AppRunningError();
