@@ -7,6 +7,143 @@ import { runInNewContext } from "node:vm";
 
 const require = createRequire(import.meta.url);
 
+function updateInstallFixture() {
+  const state = {
+    available: true,
+    installedVersion: "1.0.0.0",
+    completeDuringCheck: false,
+    failCheck: false,
+    brokerCommands: [] as string[],
+    dialogs: [] as { message: string; detail?: string }[],
+    quits: 0,
+    nativeInstalls: 0,
+  };
+  let ready = false;
+  const manager = {
+    options: { onInstallUpdatesRequested: () => { state.quits++; } },
+    getIsUpdateReady: () => ready,
+    setUpdateReady: (value: boolean) => { ready = value; },
+    setUpdateLifecycleState() {},
+    checkForUpdates: async () => {},
+    installUpdatesIfAvailable: async () => { state.nativeInstalls++; ready = false; },
+  };
+  const loaded = {
+    factory: Function("state",
+      "return function(){ const { appUpdates, setSparkleBridgeHandlers } = state; return state; }",
+    )({ appUpdates: manager }),
+  };
+  const fakeRequire = Object.assign((name: string) => {
+    if (name === "node:fs") return {
+      readFileSync: (file: string) => file.endsWith("state.json")
+        ? JSON.stringify({ appRoot: "C:\\store-apps\\OpenAI.Codex_1.0.0.0_x64__publisher\\app" })
+        : '"C:\\Program Files\\nodejs\\node.exe" "D:\\CodexDC\\cli.js" %*',
+      existsSync: () => true,
+    };
+    if (name === "../updater-discovery.js") return require("../../runtime/platform/updater-discovery.js");
+    if (name === "node:path") return path;
+    if (name === "node:module") return { _load: () => loaded };
+    if (name === "electron") return {
+      app: { on() {}, removeListener() {} },
+      dialog: { showMessageBox: async (options: { message: string }) => { state.dialogs.push(options); } },
+    };
+    if (name === "node:child_process") return {
+      execFile: (_file: string, args: string[], _options: unknown, callback: Function) => {
+        if (args.at(-1)?.includes("Invoke-CimMethod")) {
+          state.brokerCommands.push(args.at(-1)!);
+          callback(null, "4321");
+        } else if (args.includes("-File")) {
+          if (state.failCheck) { callback(new Error("Store unavailable")); return; }
+          if (state.completeDuringCheck) state.installedVersion = "2.0.0.0";
+          callback(null, JSON.stringify({ available: state.available }));
+        } else {
+          callback(null, JSON.stringify({ Version: state.installedVersion, InstallLocation: "C:\\Store" }));
+        }
+      },
+    };
+    throw new Error(`Unexpected require: ${name}`);
+  }, { cache: { bootstrap: { filename: "bootstrap-test.js", exports: loaded } } });
+  const module = { exports: {} as { start(api: unknown): void; stop(): void } };
+  runInNewContext(
+    readFileSync(new URL("../../runtime/platform/windows/index.js", import.meta.url), "utf8"),
+    {
+      module, require: fakeRequire, __dirname: "C:\\runtime",
+      process: { platform: "win32", pid: 1234, env: { CODEXDC_USER_ROOT: "C:\\CodexDC" } },
+      setImmediate: (callback: Function) => callback(),
+      setInterval: () => ({ unref() {} }), clearInterval() {},
+    },
+  );
+  module.exports.start({ log: { info() {}, warn() {}, error() {} } });
+  return { state, manager, stop: module.exports.stop };
+}
+
+test("clicking an offered Store update still starts repair when the next search omits it", async () => {
+  const f = updateInstallFixture();
+  try {
+    await f.manager.checkForUpdates();
+    assert.equal(f.manager.getIsUpdateReady(), true);
+    f.state.available = false;
+    await f.manager.installUpdatesIfAvailable();
+    assert.equal(f.state.nativeInstalls, 0, "the managed copy must not fall into the unavailable stock updater");
+    assert.equal(f.state.brokerCommands.length, 1);
+    assert.match(f.state.brokerCommands[0]!, /--store-family/);
+    assert.equal(f.state.quits, 1);
+  } finally { f.stop(); }
+});
+
+test("a Store update completed during detection repairs the installed package without downloading again", async () => {
+  const f = updateInstallFixture();
+  try {
+    await f.manager.checkForUpdates();
+    f.state.available = false;
+    f.state.completeDuringCheck = true;
+    await f.manager.installUpdatesIfAvailable();
+    assert.equal(f.state.nativeInstalls, 0);
+    assert.equal(f.state.brokerCommands.length, 1);
+    assert.doesNotMatch(f.state.brokerCommands[0]!, /--store-family/);
+    assert.equal(f.state.quits, 1);
+  } finally { f.stop(); }
+});
+
+test("an expired update click explains the result instead of silently calling an unavailable updater", async () => {
+  const f = updateInstallFixture();
+  try {
+    await f.manager.checkForUpdates();
+    f.state.available = false;
+    await f.manager.checkForUpdates();
+    await f.manager.installUpdatesIfAvailable();
+    assert.equal(f.state.nativeInstalls, 0);
+    assert.equal(f.state.quits, 0);
+    assert.equal(f.state.dialogs.length, 1);
+    assert.match(f.state.dialogs[0]!.message, /no longer available/i);
+  } finally { f.stop(); }
+});
+
+test("an update check failure is shown when there is no previously offered update", async () => {
+  const f = updateInstallFixture();
+  try {
+    f.state.available = false;
+    await f.manager.checkForUpdates();
+    f.state.failCheck = true;
+    await f.manager.installUpdatesIfAvailable();
+    assert.equal(f.state.nativeInstalls, 0);
+    assert.equal(f.state.quits, 0);
+    assert.match(f.state.dialogs[0]?.detail ?? "", /Store unavailable/);
+  } finally { f.stop(); }
+});
+
+test("a ready native update still uses the native installer when no Store update remains", async () => {
+  const f = updateInstallFixture();
+  try {
+    f.state.available = false;
+    await f.manager.checkForUpdates();
+    f.manager.setUpdateReady(true);
+    await f.manager.installUpdatesIfAvailable();
+    assert.equal(f.state.nativeInstalls, 1);
+    assert.equal(f.state.brokerCommands.length, 0);
+    assert.equal(f.state.dialogs.length, 0);
+  } finally { f.stop(); }
+});
+
 test("Windows update bridge reports a desktop that loads without a recognizable updater", () => {
   let created: Function | null = null;
   const warnings: string[] = [];
