@@ -9,6 +9,7 @@ let moduleLoadWrapper = null;
 let pollTimer = null;
 let patchedManager = null;
 let restoreManager = null;
+let stopAttachmentCheck = null;
 
 function compareVersions(left, right) {
   const a = String(left ?? "").split(".").map((part) => Number.parseInt(part, 10) || 0);
@@ -174,6 +175,24 @@ function start(api) {
   }
   const storeUpdateScript = path.join(__dirname, "store-update.ps1");
 
+  // A Codex release that changes its updater shape must not silently drop
+  // Store update notifications.
+  const unavailableReason = "Codex Store update notifications are unavailable because CodexDC could not attach its update bridge to this Codex version. Update CodexDC and run Setup → Repair.";
+  const checkAttachment = (_event, contents) => {
+    if (contents.getType() !== "window") return;
+    contents.once("did-finish-load", () => {
+      if (patchedManager || !contents.getURL().startsWith("app://")) return;
+      stopAttachmentCheck?.();
+      api.log.warn(unavailableReason);
+      dialog.showMessageBox({ type: "error", message: "CodexDC updates unavailable", detail: unavailableReason, buttons: ["OK"] });
+    });
+  };
+  app.on("web-contents-created", checkAttachment);
+  stopAttachmentCheck = () => {
+    app.removeListener("web-contents-created", checkAttachment);
+    stopAttachmentCheck = null;
+  };
+
   let customUpdate = null;
   let refreshInFlight = null;
   let repairStarted = false;
@@ -299,6 +318,7 @@ function start(api) {
     };
 
     patchedManager = manager;
+    stopAttachmentCheck?.();
     restoreManager = () => {
       syncUpdateReady = null;
       original.setUpdateReady(nativeUpdateReady);
@@ -346,6 +366,7 @@ function start(api) {
 function stop() {
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = null;
+  stopAttachmentCheck?.();
   restoreManager?.();
   restoreManager = null;
   patchedManager = null;
