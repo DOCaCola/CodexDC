@@ -7,6 +7,52 @@ import { runInNewContext } from "node:vm";
 
 const require = createRequire(import.meta.url);
 
+test("Windows update bridge reports a desktop that loads without a recognizable updater", () => {
+  let created: Function | null = null;
+  const warnings: string[] = [];
+  const dialogs: string[] = [];
+  const fakeRequire = Object.assign((name: string) => {
+    if (name === "node:fs") return {
+      readFileSync: () => JSON.stringify({ appRoot: "C:\\store-apps\\OpenAI.Codex_1.0.0.0_x64__publisher\\app" }),
+    };
+    if (name === "../updater-discovery.js") return require("../../runtime/platform/updater-discovery.js");
+    if (name === "node:path") return path;
+    if (name === "node:module") return { _load: () => ({}) };
+    if (name === "node:child_process") return {};
+    if (name === "electron") return {
+      app: {
+        on: (_event: string, listener: Function) => { created = listener; },
+        removeListener: (_event: string, listener: Function) => { if (created === listener) created = null; },
+      },
+      dialog: { showMessageBox: (options: { message: string }) => { dialogs.push(options.message); } },
+    };
+    throw new Error(`Unexpected require: ${name}`);
+  }, { cache: {} });
+  const module = { exports: {} as { start(api: unknown): void; stop(): void } };
+  runInNewContext(
+    readFileSync(new URL("../../runtime/platform/windows/index.js", import.meta.url), "utf8"),
+    { module, require: fakeRequire, __dirname: "C:\\runtime",
+      process: { platform: "win32", env: { CODEXDC_USER_ROOT: "C:\\CodexDC" } } },
+  );
+  module.exports.start({ log: { info() {}, warn: (message: string) => warnings.push(message) } });
+  const window = (url: string) => {
+    let loaded: Function = () => {};
+    created!({}, { getType: () => "window", getURL: () => url, once: (_event: string, listener: Function) => { loaded = listener; } });
+    loaded();
+  };
+  try {
+    window("devtools://devtools");
+    assert.deepEqual(warnings, []);
+    window("app://-/index.html");
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /could not attach its update bridge/);
+    assert.deepEqual(dialogs, ["CodexDC updates unavailable"]);
+    assert.equal(created, null, "reported once per session");
+  } finally {
+    module.exports.stop();
+  }
+});
+
 test("Store readiness clears independently of native update readiness", async () => {
   let available = true;
   let ready = false;
@@ -32,7 +78,7 @@ test("Store readiness clears independently of native update readiness", async ()
     if (name === "../updater-discovery.js") return require("../../runtime/platform/updater-discovery.js");
     if (name === "node:path") return path;
     if (name === "node:module") return moduleLoader;
-    if (name === "electron") return { app: {}, dialog: {} };
+    if (name === "electron") return { app: { on() {}, removeListener() {} }, dialog: {} };
     if (name === "node:child_process") return {
       execFile: (_file: string, args: string[], _options: unknown, callback: Function) => {
         callback(null, args.includes("-File")
