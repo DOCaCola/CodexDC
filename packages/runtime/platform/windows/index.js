@@ -195,23 +195,27 @@ function start(api) {
 
   let customUpdate = null;
   let refreshInFlight = null;
+  let refreshError = null;
   let repairStarted = false;
   let syncUpdateReady = null;
 
   const refreshStoreUpdate = async () => {
     if (refreshInFlight) return refreshInFlight;
+    refreshError = null;
     refreshInFlight = queryInstalledStorePackage(childProcess.execFile, packageDetails.packageName)
       .then(async (installed) => {
-        const newer = installed && compareVersions(installed.version, packageDetails.version) > 0;
-        customUpdate = newer
-          ? { kind: "installed", ...installed }
-          : (await queryAvailableStoreUpdate(
-              childProcess.execFile,
-              storeUpdateScript,
-              packageDetails.packageFamily,
-            ))
-            ? { kind: "available" }
-            : null;
+        let newer = installed && compareVersions(installed.version, packageDetails.version) > 0;
+        if (newer) {
+          customUpdate = { kind: "installed", ...installed };
+        } else if (await queryAvailableStoreUpdate(childProcess.execFile, storeUpdateScript, packageDetails.packageFamily)) {
+          customUpdate = { kind: "available" };
+        } else {
+          // Store can finish installing while its update search is running.
+          // An empty search does not establish that our managed copy is current.
+          installed = await queryInstalledStorePackage(childProcess.execFile, packageDetails.packageName);
+          newer = installed && compareVersions(installed.version, packageDetails.version) > 0;
+          customUpdate = newer ? { kind: "installed", ...installed } : null;
+        }
         syncUpdateReady?.();
         if (customUpdate && patchedManager) {
           const detail = newer
@@ -222,6 +226,7 @@ function start(api) {
         return customUpdate;
       })
       .catch((error) => {
+        refreshError = error;
         api.log.warn("Windows Store update check failed", error);
         return customUpdate;
       })
@@ -312,9 +317,26 @@ function start(api) {
       return original.checkForUpdates(...args);
     };
     manager.installUpdatesIfAvailable = async (...args) => {
+      // Keep the offer the user clicked: Store searches can stop returning a
+      // package once its download starts, before registration has completed.
+      const offeredUpdate = customUpdate;
+      api.log.info("CodexDC Store update installation requested");
       await refreshStoreUpdate();
-      if (customUpdate) return launchRepairAfterExit(manager, customUpdate);
-      return original.installUpdatesIfAvailable(...args);
+      const update = customUpdate ?? offeredUpdate;
+      if (update) return launchRepairAfterExit(manager, update);
+      if (nativeUpdateReady) return original.installUpdatesIfAvailable(...args);
+      const failed = refreshError !== null;
+      api.log.warn(failed ? "CodexDC could not verify the requested Store update" : "The requested Codex Store update is no longer available");
+      await dialog.showMessageBox({
+        type: failed ? "error" : "info",
+        buttons: ["OK"],
+        message: failed ? "CodexDC could not check for the update." : "The Codex update is no longer available.",
+        detail: failed
+          ? `${refreshError instanceof Error ? refreshError.message : String(refreshError)}\n\nCheck for updates again or update official Codex through Microsoft Store, then run CodexDC Repair.`
+          : "Microsoft Store no longer reports this update, and no newer installed package was found. CodexDC has not been updated. Check for updates again later.",
+        noLink: true,
+      });
+      return false;
     };
 
     patchedManager = manager;
