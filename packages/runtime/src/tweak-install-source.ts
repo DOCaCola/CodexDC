@@ -38,7 +38,7 @@ export interface DevelopmentPullResult {
 
 /**
  * Rebase a development checkout onto its upstream branch. Local commits are
- * preserved on top of upstream; a conflicting rebase is aborted so the
+ * preserved on top of upstream; a failed rebase is aborted so the
  * checkout is left exactly as it was.
  */
 export async function pullDevelopmentCheckout(checkout: string): Promise<DevelopmentPullResult> {
@@ -56,7 +56,8 @@ export async function pullDevelopmentCheckout(checkout: string): Promise<Develop
     if (await rebaseInProgress(checkout)) {
       await git(checkout, ["rebase", "--abort"]);
       throw new Error(
-        `Your local commits in ${checkout} conflict with ${upstream}. The pull was undone; resolve it manually with git pull --rebase.`,
+        `Could not rebase ${checkout} onto ${upstream}. The pull was undone. ${(error as Error).message}`,
+        { cause: error },
       );
     }
     throw error;

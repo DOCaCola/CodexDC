@@ -13,7 +13,7 @@ function git(cwd: string, ...args: string[]): string {
 function commitFile(cwd: string, file: string, content: string, message: string): void {
   writeFileSync(join(cwd, file), content);
   git(cwd, "add", "-A");
-  git(cwd, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-q", "-m", message);
+  git(cwd, "commit", "-q", "-m", message);
 }
 
 function fixture(t: test.TestContext) {
@@ -24,11 +24,15 @@ function fixture(t: test.TestContext) {
   const other = join(root, "other");
   git(root, "init", "-q", "--bare", "-b", "main", upstream);
   git(root, "clone", "-q", upstream, checkout);
+  git(checkout, "config", "--local", "user.name", "CodexDC Test");
+  git(checkout, "config", "--local", "user.email", "codexdc-test@example.com");
   mkdirSync(join(checkout, "tweaks", "colors"), { recursive: true });
   writeFileSync(join(checkout, "tweaks", "colors", "manifest.json"), "{\"version\":\"1.0.0\"}");
   commitFile(checkout, "base.txt", "base", "base");
   git(checkout, "push", "-q", "-u", "origin", "main");
   git(root, "clone", "-q", upstream, other);
+  git(other, "config", "--local", "user.name", "CodexDC Test");
+  git(other, "config", "--local", "user.email", "codexdc-test@example.com");
   return { root, checkout, other };
 }
 
@@ -78,7 +82,28 @@ test("a conflicting pull is undone and leaves local commits in place", async (t)
   commitFile(checkout, "base.txt", "local", "local edit");
   const before = git(checkout, "rev-parse", "HEAD");
 
-  await assert.rejects(pullDevelopmentCheckout(checkout), /conflict with origin\/main\. The pull was undone/);
+  await assert.rejects(pullDevelopmentCheckout(checkout), /The pull was undone\.[\s\S]*could not apply/i);
+  assert.equal(git(checkout, "rev-parse", "HEAD"), before);
+  assert.equal(git(checkout, "status", "--porcelain"), "");
+});
+
+test("a pull without committer identity reports the Git error and restores local commits", async (t) => {
+  const { checkout, other } = fixture(t);
+  commitFile(other, "upstream.txt", "upstream", "upstream change");
+  git(other, "push", "-q");
+  commitFile(checkout, "local.txt", "local", "local change");
+  const before = git(checkout, "rev-parse", "HEAD");
+  git(checkout, "config", "--local", "user.name", "");
+  git(checkout, "config", "--local", "user.email", "");
+
+  await assert.rejects(pullDevelopmentCheckout(checkout), (error: Error) => {
+    assert.match(error.message, /The pull was undone\.[\s\S]*git pull failed:/);
+    assert.match(error.message, /identity unknown|empty ident/);
+    assert.doesNotMatch(error.message, /conflict with/);
+    assert.ok(error.cause instanceof Error);
+    assert.ok(error.message.includes(error.cause.message));
+    return true;
+  });
   assert.equal(git(checkout, "rev-parse", "HEAD"), before);
   assert.equal(git(checkout, "status", "--porcelain"), "");
 });
