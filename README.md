@@ -48,17 +48,17 @@ versions and updates. Core app maintenance continues with optional tweaks disabl
 
 Use **Settings → Codex-DC → Config → Codex CLI**, or Setup → Choose Codex CLI backend:
 
-- **DC fork (default)** downloads the complete latest stable `DOCaCola/codex` release,
+- **DC fork** (default) downloads the complete latest stable `DOCaCola/codex` release,
   checks its SHA-256, and probes app-server initialization before making it available.
-- **Desktop bundled (stock)** uses the CLI supplied with the desktop.
-- **Local path** uses a validated executable directly, without copying your build.
+- **Desktop bundled** uses the CLI supplied with the desktop.
+- **Local executable** uses a validated executable directly, without copying your build.
 
-Choose a source and **Save CLI selection**. Selecting DC fork installs it when needed.
+Choosing a source saves it immediately. Selecting DC fork installs it when needed.
 Setup also prepares it by default. Existing saved selections take precedence; on first
-setup an explicit `CODEX_CLI_PATH` override is validated and saved as **Local path**.
+setup an explicit `CODEX_CLI_PATH` override is validated and saved as **Local executable**.
 The normal system PATH is not used to guess a backend.
 
-Enable **Automatically update the DC fork before launch** in the CLI settings to
+Enable **Update automatically** in the CLI settings to
 check stable releases at most once per hour, on Windows x64 or macOS Apple Silicon.
 It is off by default and only applies when the DC fork is selected. Downloads are
 checksum-verified and the complete package must pass app-server initialization
@@ -67,11 +67,11 @@ Running desktops are never restarted for an update. Rollback turns auto-update
 off to retain the restored version. CLI equivalent:
 `codexdc backend auto-update on` (or `off`).
 
-Use **Install / update DC fork** to refresh a downloaded release. Quit and reopen Codex-DC after
-finishing active tasks. Settings shows the running path separately from the saved
-selection, along with the CLI version reported by the running backend at initialization.
-This version omits custom build suffixes such as `-doca`. You can explicitly switch
-back or select the previous fork version.
+Use **Check for updates** to install a newer fork release (`codexdc backend update`).
+Quit and reopen Codex-DC after finishing active tasks; Settings shows the CLI version
+reported by the running backend and notes when the saved selection still needs a restart.
+This version omits custom build suffixes such as `-doca`. **Use <version>** switches
+back to the previous fork version.
 The bundled executable and system PATH are not replaced.
 
 The Windows fork release includes hpatch, sandbox helpers, the code-mode host and

@@ -226,3 +226,11 @@ export async function installBackend(root = userPaths().root, candidate?: Releas
     closeSync(lock); rmSync(lockPath, { force: true });
   }
 }
+
+/** Install the latest fork release unless it is already the installed one. */
+export async function updateBackend(root = userPaths().root, services = installServices): Promise<BackendState> {
+  const release = await services.latestRelease(CLI_REPO);
+  const state = backendState(root);
+  if (state.installed?.releaseId === release.id && existsSync(state.installed.executable)) return state;
+  return installBackend(root, release, services);
+}

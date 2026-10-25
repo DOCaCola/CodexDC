@@ -7,7 +7,7 @@ import { uninstall } from "./uninstall.js";
 import { safeMode } from "./safe-mode.js";
 import { installManagedMac, uninstallManagedMac } from "../managed-mac.js";
 import { launchManaged } from "../launch.js";
-import { backendState, checkBackend, installBackend, selectAvailableBackend, rollbackBackend, configureDevelopmentBackend } from "../backend.js";
+import { backendState, checkBackend, updateBackend, selectAvailableBackend, rollbackBackend, configureDevelopmentBackend } from "../backend.js";
 import { userPaths } from "../paths.js";
 import { updateCodex } from "./update-codex.js";
 
@@ -61,15 +61,15 @@ export async function manager(): Promise<void> {
           console.log(JSON.stringify(backendState(), null, 2));
           const { choice } = await prompts({ type: "select", name: "choice", message: "Codex CLI",
             choices: [
-              { title: "DC fork (default)", value: "fork" },
-              { title: "Desktop bundled (stock)", value: "bundled" },
-              { title: "Install / update DC fork", value: "install" },
+              { title: "DC fork", value: "fork" },
+              { title: "Desktop bundled", value: "bundled" },
+              { title: "Update DC fork", value: "update" },
               { title: "Local path", value: "development" },
               { title: "Check latest release", value: "check" },
               { title: "Previous installed DC fork", value: "rollback" },
               { title: "Back", value: "back" },
             ] });
-          if (choice === "install") await installBackend();
+          if (choice === "update") await updateBackend();
           else if (choice === "fork" || choice === "bundled") await selectAvailableBackend(choice);
           else if (choice === "development") {
             const { executable } = await prompts({ type: "text", name: "executable",

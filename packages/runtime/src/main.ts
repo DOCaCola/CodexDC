@@ -355,7 +355,7 @@ function isPathInside(parent: string, target: string): boolean {
 
 function log(level: "info" | "warn" | "error", ...args: unknown[]): void {
   const line = `[${new Date().toISOString()}] [${level}] ${args
-    .map((a) => (typeof a === "string" ? a : JSON.stringify(a)))
+    .map((a) => (typeof a === "string" ? a : a instanceof Error ? a.stack ?? String(a) : JSON.stringify(a)))
     .join(" ")}\n`;
   try {
     appendCappedLog(LOG_FILE, line);
@@ -580,7 +580,7 @@ ipcMain.handle("codexdc:backend", async (_event, action: string, provider?: stri
     });
     return result.canceled ? null : result.filePaths[0];
   }
-  if (!["status", "check", "install", "select", "develop", "rollback", "auto-update"].includes(action)) throw new Error("Unknown backend action");
+  if (!["status", "update", "select", "develop", "rollback", "auto-update"].includes(action)) throw new Error("Unknown backend action");
   if (action === "auto-update" && !["on", "off"].includes(provider ?? "")) throw new Error("Unknown CLI update setting");
   if (action === "select" && !["bundled", "fork", "development"].includes(provider ?? "")) throw new Error("Unknown CLI provider");
   const result = JSON.parse(await runMaintenance("backend", [action, ...(provider ? [provider] : [])]));
