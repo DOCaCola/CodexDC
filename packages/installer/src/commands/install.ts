@@ -559,8 +559,8 @@ function formatWindowsShellHarnessFailure(
   const lines = [
     "Windows shell harness patch point not found.",
     "",
-    "CodexDC could not identify Codex's Windows SHELL guard.",
-    "This usually means Codex changed the local-environment shell selection helper or already fixed the issue in a new shape.",
+    "CodexDC could not identify both Codex's Windows SHELL guard and shell environment hydration.",
+    "This usually means Codex changed the local-environment shell helpers or already fixed the issue in a new shape.",
     "",
     `Candidate files scanned: ${diagnostics.length}`,
   ];
@@ -578,6 +578,9 @@ function formatWindowsShellHarnessFailure(
       `  Marker already present: ${candidate.diagnostics.hasMarker ? "yes" : "no"}`,
       `  Restrictive SHELL guards: ${candidate.diagnostics.restrictiveMatches}`,
       `  Permissive SHELL guards: ${candidate.diagnostics.permissiveMatches}`,
+      `  Environment marker already present: ${candidate.diagnostics.hasEnvMarker ? "yes" : "no"}`,
+      `  Shell environment hydrations: ${candidate.diagnostics.envHydrationMatches}`,
+      `  Legacy shell environment hydrations: ${candidate.diagnostics.legacyEnvHydrationMatches}`,
       `  SHELL mentions: ${candidate.diagnostics.shellMentions}`,
       `  powershell mentions: ${candidate.diagnostics.powershellMentions}`,
     );

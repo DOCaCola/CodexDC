@@ -80,6 +80,71 @@ test("windows shell harness patch rewrites the regex-based guard from current St
   assert.doesNotMatch(patched.source, /pwsh\|powershell.*\.test\(t\)/);
 });
 
+test("windows shell harness handles either comparison order across minified bundles", () => {
+  for (const shellVar of ["t", "$shell"]) {
+    for (const quote of ['"', "'", "`"]) {
+      for (const nullCheck of [`${shellVar}!=null`, `null!=${shellVar}`]) {
+        const source = String.raw`function select(e){let ${shellVar}=read(e,${quote}SHELL${quote});if(${nullCheck}&&/(?:^|[\\/])(?:pwsh|powershell)(?:\.exe)?$/i.test(${shellVar}))return ${shellVar};return "powershell.exe"}`;
+        const diagnostics = describeWindowsShellHarnessSource(source);
+        assert.equal(diagnostics.restrictiveMatches, 1);
+        const patched = patchWindowsShellHarnessSource(source);
+        assert.ok(patched);
+        assert.equal(patched.guardStatus, "patched");
+        assert.equal(patched.matchCount, 1);
+        const select = new Function("read", `${patched.source};return select`)(
+          (env: Record<string, string>, key: string) => env[key],
+        );
+        assert.equal(select({ SHELL: "C:\\msys64\\usr\\bin\\bash.exe" }), "C:\\msys64\\usr\\bin\\bash.exe");
+        assert.equal(select({ SHELL: "pwsh.exe" }), "pwsh.exe");
+        assert.equal(select({ SHELL: "" }), "powershell.exe");
+        assert.equal(select({}), "powershell.exe");
+        assert.equal(patchWindowsShellHarnessSource(patched.source)?.changed, false);
+
+        const permissive = source.replace(
+          String.raw`/(?:^|[\\/])(?:pwsh|powershell)(?:\.exe)?$/i.test(${shellVar})`,
+          `${shellVar}.length>0`,
+        );
+        assert.equal(describeWindowsShellHarnessSource(permissive).permissiveMatches, 1);
+        const upstreamFixed = patchWindowsShellHarnessSource(permissive);
+        assert.equal(upstreamFixed?.guardStatus, "already-fixed");
+        assert.equal(upstreamFixed?.changed, false);
+      }
+    }
+  }
+});
+
+test("windows shell harness preserves native environment with literal-first loaded checks", () => {
+  const source = 'function hydrate(s){if("loaded"===s.status)return Object.assign(process.env,s.userEnv),s;return s}';
+  assert.equal(describeWindowsShellHarnessSource(source).envHydrationMatches, 1);
+  const patched = patchWindowsShellHarnessSource(source);
+  assert.ok(patched);
+  assert.equal(patched.envStatus, "patched");
+  const processMock = {
+    platform: "win32",
+    env: { Path: "C:\\Windows;C:\\msys64\\usr\\bin", HOME: "C:\\Users\\Example" } as Record<string, string>,
+  };
+  const hydrate = new Function("process", `${patched.source};return hydrate`)(processMock);
+  const result = { status: "loaded", userEnv: { PATH: "/usr/bin", HOME: "/c/Users/Example", SHELL: "/usr/bin/bash" } };
+  assert.equal(hydrate(result), result);
+  assert.deepEqual(processMock.env, {
+    Path: "C:\\Windows;C:\\msys64\\usr\\bin",
+    HOME: "C:\\Users\\Example",
+    SHELL: "/usr/bin/bash",
+  });
+  assert.equal(patchWindowsShellHarnessSource(patched.source)?.changed, false);
+});
+
+test("windows shell harness does not patch guards or hydrations for different variables", () => {
+  for (const source of [
+    'function select(e){let t=read(e,"SHELL");if(null!=other&&/powershell/i.test(t))return t}',
+    'function select(e){let t=read(e,"SHELL");if(null!=t&&/unrelated/i.test(t))return t}',
+    'function hydrate(s){if("loaded"===s.status)return Object.assign(process.env,other.userEnv),s}',
+    'function hydrate(s){if(s.status==="loaded")return Object.assign(process.env,other.userEnv),s}',
+  ]) {
+    assert.equal(patchWindowsShellHarnessSource(source), null);
+  }
+});
+
 test("windows shell harness patch is idempotent after marker insertion", () => {
   const first = patchWindowsShellHarnessSource(
     [

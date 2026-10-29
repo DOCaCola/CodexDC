@@ -44,12 +44,13 @@ export interface WindowsShellHarnessSourceDiagnostics {
   snippet: string | null;
 }
 
+// Bundlers may place literals on either side of these equivalent comparisons.
 const SHELL_GUARD_RE =
-  /(let\s+([$\w]+)\s*=\s*[^;]*([`'"])SHELL\3[^;]*;\s*)if\(\2!=null&&([\s\S]*?)\)return \2;?/g;
+  /(let\s+([$\w]+)\s*=\s*[^;]*([`'"])SHELL\3[^;]*;\s*)if\((?:\2\s*!=\s*null|null\s*!=\s*\2)\s*&&([\s\S]*?)\)return \2;?/g;
 const PERMISSIVE_SHELL_GUARD_RE =
-  /let\s+([$\w]+)\s*=\s*[^;]*([`'"])SHELL\2[^;]*;\s*if\(\1!=null&&\1\.length>0\)return \1;/g;
+  /let\s+([$\w]+)\s*=\s*[^;]*([`'"])SHELL\2[^;]*;\s*if\((?:\1\s*!=\s*null|null\s*!=\s*\1)\s*&&\1\.length>0\)return \1;/g;
 const SHELL_ENV_HYDRATION_RE =
-  /if\(([$\w]+)\.status===([`'"])loaded\2\)return Object\.assign\(process\.env,\1\.userEnv\),/g;
+  /if\((?:([$\w]+)\.status===([`'"])loaded\2|([`'"])loaded\3===([$\w]+)\.status)\)return Object\.assign\(process\.env,(?:\1|\4)\.userEnv\),/g;
 const LEGACY_SHELL_ENV_HYDRATION_RE =
   /if\(([$\w]+)\.status===([`'"])loaded\2\)return Object\.assign\(process\.env,\(\(__codexppNativeEnv,__codexppShellEnv\)=>\{[\s\S]*?\}\)\(process\.env,\1\.userEnv\)\),\/\*__codexpp_windows_shell_path__\*\//g;
 
@@ -116,7 +117,16 @@ export function patchWindowsShellHarnessSource(
   if (envStatus === "patched") {
     patched = patched.replace(
       SHELL_ENV_HYDRATION_RE,
-      (_match, resultVar: string, resultQuote: string) => {
+      (
+        _match,
+        leftVar: string | undefined,
+        rightQuote: string | undefined,
+        leftQuote: string | undefined,
+        rightVar: string | undefined,
+      ) => {
+        // The first pair captures status-first checks; the second captures literal-first checks.
+        const resultVar = leftVar ?? rightVar!;
+        const resultQuote = rightQuote ?? leftQuote!;
         envPatchCount += 1;
         const nativeOnlyKeys = WINDOWS_NATIVE_ENV_KEYS
           .map((key) => `${resultQuote}${key}${resultQuote}`)

@@ -72,8 +72,38 @@ test("patchWindowsShellHarness rejects a partial guard-only patch", () => {
 
     assert.throws(
       () => patchWindowsShellHarness(root),
-      /Windows shell harness/i,
+      /Shell environment hydrations: 0/,
     );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("patchWindowsShellHarness patches literal-first guards in early bootstrap chunks and workers", () => {
+  const root = mkdtempSync(join(tmpdir(), "codexpp-shell-harness-"));
+  try {
+    const buildDir = join(root, ".vite", "build");
+    mkdirSync(buildDir, { recursive: true });
+    const guardPaths = [
+      join(buildDir, "early-bootstrap-824-3c24dda6dba622ec.js"),
+      join(buildDir, "worker.js"),
+    ];
+    for (const filePath of guardPaths) {
+      writeFileSync(filePath, regexRestrictiveGuard("guard").replace("t!=null", "null!=t"));
+    }
+    const envPath = join(buildDir, "early-bootstrap.js");
+    writeFileSync(envPath, shellEnvironmentHydration().replace("s.status===`loaded`", '"loaded"===s.status'));
+
+    patchWindowsShellHarness(root);
+    const paths = [...guardPaths, envPath];
+    const patchedSources = paths.map((filePath) => readFileSync(filePath, "utf8"));
+    for (const source of patchedSources.slice(0, 2)) {
+      assert.ok(source.includes(`/*${WINDOWS_SHELL_HARNESS_KEY}*/`));
+      assert.doesNotMatch(source, /null!=t/);
+    }
+    assert.ok(patchedSources[2].includes(`/*${WINDOWS_SHELL_ENV_KEY}*/`));
+    patchWindowsShellHarness(root);
+    assert.deepEqual(paths.map((filePath) => readFileSync(filePath, "utf8")), patchedSources);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
