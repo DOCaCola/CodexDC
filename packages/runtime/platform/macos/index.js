@@ -1,5 +1,5 @@
 "use strict";
-const { findUpdaterSharedState, isUpdaterModulePath } = require("../updater-discovery.js");
+const { createUpdaterObserver, isUpdaterModulePath } = require("../updater-discovery.js");
 
 function attachManager(manager, services) {
   let ready = false;
@@ -122,11 +122,10 @@ function start(api) {
     });
   });
   let attached = false;
-  function inspect(loaded) {
+  const observer = createUpdaterObserver(shared => {
     if (attached) return;
-    const shared = findUpdaterSharedState(loaded);
-    if (!shared) return;
     attached = true;
+    observer.stop();
     const refresh = attachManager(shared.appUpdates, {
       check: () => new Promise((resolve, reject) => execFile(state.nodePath, [cli, "mac-update"],
         { env, timeout: 15000 }, (error, stdout, stderr) => {
@@ -155,7 +154,7 @@ function start(api) {
     timer.unref();
     app.once("will-quit", () => clearInterval(timer));
     api.log.info("macOS managed update bridge attached");
-  }
+  });
   const original = Module._load;
   Module._load = function(request, parent, isMain) {
     if (/(?:^|[/\\])sparkle\.node$/i.test(String(request))) {
@@ -163,11 +162,11 @@ function start(api) {
       throw new Error(unavailableReason);
     }
     const loaded = original.apply(this, [request, parent, isMain]);
-    if (isUpdaterModulePath(request)) inspect(loaded);
+    if (isUpdaterModulePath(request)) observer.inspect(loaded);
     return loaded;
   };
   for (const cached of Object.values(require.cache)) {
-    if (isUpdaterModulePath(cached?.filename)) inspect(cached.exports);
+    if (isUpdaterModulePath(cached?.filename)) observer.inspect(cached.exports);
   }
 }
 module.exports = { start, attachManager, prepareHelper };

@@ -8,7 +8,7 @@ import { runInNewContext } from "node:vm";
 
 const require = createRequire(import.meta.url);
 
-function fixture(cached: boolean, supported = true) {
+function fixture(cached: boolean, supported = true, chunked = false) {
   const messages: string[] = [];
   const warnings: string[] = [];
   const logs: string[] = [];
@@ -25,9 +25,20 @@ function fixture(cached: boolean, supported = true) {
     setDownloadProgressPercent() {},
     setUpdateLifecycleState() {},
   };
-  const loaded = supported ? {
+  const singleton = supported ? {
     I: Function("manager", "return function(){ return { appUpdates: manager, setSparkleBridgeHandlers() {} }; }")(manager),
   } : { unrelated() {} };
+  const loaded = chunked ? {
+    ids: [339],
+    modules: {
+      35915(module: { exports: unknown }) {
+        // Match the bundled module's semantics without executing its singleton early.
+        const { appUpdates, setSparkleBridgeHandlers } = { appUpdates: manager, setSparkleBridgeHandlers() {} };
+        module.exports = singleton;
+      },
+    },
+  } : singleton;
+  const filename = chunked ? "early-bootstrap-339-aea964a206c655e4.js" : "bootstrap-current.js";
   const moduleLoader = { _load: (request: string) => { loads.push(request); return loaded; } };
   const app = Object.assign(new EventEmitter(), {
     whenReady: () => Promise.resolve(),
@@ -57,7 +68,7 @@ function fixture(cached: boolean, supported = true) {
       },
     };
     throw new Error(`Unexpected require: ${name}`);
-  }, { cache: cached ? { bootstrap: { filename: "bootstrap-current.js", exports: loaded } } : {} });
+  }, { cache: cached ? { bootstrap: { filename, exports: loaded } } : {} });
   const module = { exports: {} as { start(api: unknown): void } };
   runInNewContext(readFileSync(new URL("../../runtime/platform/macos/index.js", import.meta.url), "utf8"), {
     module, require: fakeRequire,
@@ -75,8 +86,29 @@ function fixture(cached: boolean, supported = true) {
     app.emit("web-contents-created", {}, contents);
     contents.emit("did-finish-load");
   };
-  return { manager, moduleLoader, messages, warnings, logs, loads, loadDesktopWindow,
+  const executeChunk = () => {
+    const chunk = loaded as { modules: Record<number, (module: { exports: unknown }) => void> };
+    chunk.modules[35915]({ exports: {} });
+  };
+  return { manager, moduleLoader, messages, warnings, logs, loads, loadDesktopWindow, executeChunk, filename,
     counts: () => ({ nativeInitializations, preparations, quits }) };
+}
+
+for (const cached of [false, true]) {
+  test(`macOS attaches to a ${cached ? "cached" : "newly loaded"} Rspack chunk before native initialization`, async () => {
+    const state = fixture(cached, true, true);
+    if (!cached) state.moduleLoader._load(`/app/.vite/build/${state.filename}`);
+    assert.equal(state.logs.includes("macOS managed update bridge attached"), false);
+    state.executeChunk();
+    await state.manager.initializeMacSparkle();
+    state.loadDesktopWindow();
+    await Promise.resolve();
+    assert.equal(state.logs.includes("macOS managed update bridge attached"), true);
+    assert.deepEqual(state.warnings, []);
+    assert.deepEqual(state.messages, []);
+    assert.equal(await state.manager.installUpdatesIfAvailable(), true);
+    assert.deepEqual(state.counts(), { nativeInitializations: 0, preparations: 1, quits: 1 });
+  });
 }
 
 for (const cached of [false, true]) {

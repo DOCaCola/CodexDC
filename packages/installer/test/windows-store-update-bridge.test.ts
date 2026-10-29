@@ -7,7 +7,7 @@ import { runInNewContext } from "node:vm";
 
 const require = createRequire(import.meta.url);
 
-function updateInstallFixture() {
+function updateInstallFixture(chunked = false) {
   const state = {
     available: true,
     installedVersion: "1.0.0.0",
@@ -27,11 +27,20 @@ function updateInstallFixture() {
     checkForUpdates: async () => {},
     installUpdatesIfAvailable: async () => { state.nativeInstalls++; ready = false; },
   };
-  const loaded = {
+  const singleton = {
     factory: Function("state",
       "return function(){ const { appUpdates, setSparkleBridgeHandlers } = state; return state; }",
     )({ appUpdates: manager }),
   };
+  const loaded = chunked ? {
+    ids: [339],
+    modules: {
+      35915(module: { exports: unknown }) {
+        const { appUpdates, setSparkleBridgeHandlers } = { appUpdates: manager, setSparkleBridgeHandlers() {} };
+        module.exports = singleton;
+      },
+    },
+  } : singleton;
   const fakeRequire = Object.assign((name: string) => {
     if (name === "node:fs") return {
       readFileSync: (file: string) => file.endsWith("state.json")
@@ -61,7 +70,7 @@ function updateInstallFixture() {
       },
     };
     throw new Error(`Unexpected require: ${name}`);
-  }, { cache: { bootstrap: { filename: "bootstrap-test.js", exports: loaded } } });
+  }, { cache: { bootstrap: { filename: chunked ? "early-bootstrap-339-current.js" : "bootstrap-test.js", exports: loaded } } });
   const module = { exports: {} as { start(api: unknown): void; stop(): void } };
   runInNewContext(
     readFileSync(new URL("../../runtime/platform/windows/index.js", import.meta.url), "utf8"),
@@ -73,6 +82,9 @@ function updateInstallFixture() {
     },
   );
   module.exports.start({ log: { info() {}, warn() {}, error() {} } });
+  if (chunked) {
+    (loaded as { modules: Record<number, (module: { exports: unknown }) => void> }).modules[35915]({ exports: {} });
+  }
   return { state, manager, stop: module.exports.stop };
 }
 
@@ -86,6 +98,18 @@ test("clicking an offered Store update still starts repair when the next search 
     assert.equal(f.state.nativeInstalls, 0, "the managed copy must not fall into the unavailable stock updater");
     assert.equal(f.state.brokerCommands.length, 1);
     assert.match(f.state.brokerCommands[0]!, /--store-family/);
+    assert.equal(f.state.quits, 1);
+  } finally { f.stop(); }
+});
+
+test("Store updates discovered in Rspack chunks still start managed repair", async () => {
+  const f = updateInstallFixture(true);
+  try {
+    await f.manager.checkForUpdates();
+    assert.equal(f.manager.getIsUpdateReady(), true);
+    await f.manager.installUpdatesIfAvailable();
+    assert.equal(f.state.nativeInstalls, 0);
+    assert.equal(f.state.brokerCommands.length, 1);
     assert.equal(f.state.quits, 1);
   } finally { f.stop(); }
 });

@@ -4,6 +4,7 @@ const POLL_INTERVAL_MS = 5 * 60 * 1000;
 const PATCH_MARKER = "__codexppWindowsStoreUpdateBridge";
 
 let moduleLoadOwner = null;
+let updaterObserver = null;
 let originalModuleLoad = null;
 let moduleLoadWrapper = null;
 let pollTimer = null;
@@ -96,7 +97,7 @@ async function launchBrokeredWindowsProcess(execFile, commandLine) {
   return pid;
 }
 
-const { findUpdaterSharedState, isUpdaterModulePath } = require("../updater-discovery.js");
+const { findUpdaterSharedState, createUpdaterObserver, isUpdaterModulePath } = require("../updater-discovery.js");
 
 function readInstallerState(fs, path, userRoot) {
   try {
@@ -358,21 +359,19 @@ function start(api) {
     api.log.info("Windows Store update bridge attached to the native Codex updater");
   };
 
-  const inspectLoadedModule = (loaded) => {
-    const sharedState = findUpdaterSharedState(loaded);
-    if (sharedState) patchSharedState(sharedState);
-  };
-
-  const inspectLoadedModuleLater = (loaded) => {
-    setImmediate(() => inspectLoadedModule(loaded));
-  };
+  const observer = createUpdaterObserver(sharedState => {
+    setImmediate(() => {
+      if (updaterObserver === observer) patchSharedState(sharedState);
+    });
+  });
+  updaterObserver = observer;
 
   moduleLoadOwner = Module;
   originalModuleLoad = Module._load;
   moduleLoadWrapper = function codexPlusPlusWindowsUpdateModuleLoad(request, parent, isMain) {
     const loaded = originalModuleLoad.apply(this, [request, parent, isMain]);
     if (isUpdaterModulePath(request)) {
-      inspectLoadedModuleLater(loaded);
+      observer.inspect(loaded);
     }
     return loaded;
   };
@@ -380,12 +379,14 @@ function start(api) {
 
   for (const cached of Object.values(require.cache)) {
     if (isUpdaterModulePath(cached?.filename)) {
-      inspectLoadedModuleLater(cached.exports);
+      observer.inspect(cached.exports);
     }
   }
 }
 
 function stop() {
+  updaterObserver?.stop();
+  updaterObserver = null;
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = null;
   stopAttachmentCheck?.();
