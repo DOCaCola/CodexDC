@@ -22,8 +22,8 @@ export async function launchManaged(): Promise<void> {
   }
   const next = await maintainBeforeLaunch(process.env.CODEXDC_LAUNCH_CHECKED !== "1");
   if (next) {
-    execFileSync(join(next, "node", process.platform === "win32" ? "node.exe" : "node"),
-      [join(next, "packages", "installer", "dist", "cli.js"), "launch"],
+    execFileSync(next.node,
+      [join(next.root, "packages", "installer", "dist", "cli.js"), "launch"],
       { env: { ...process.env, CODEXDC_LAUNCH_CHECKED: "1" }, stdio: "inherit" });
     return;
   }

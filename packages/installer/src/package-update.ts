@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { updateDevelopmentCheckout } from "./development-update.js";
 import { ensureUserPaths } from "./paths.js";
 import { findSourceRoot } from "./source-root.js";
 import { readState, writeState } from "./state.js";
@@ -15,13 +16,16 @@ interface Opts { quiet?: boolean; onLaunch?: boolean; force?: boolean; repo?: st
 
 const updateServices = {
   latestRelease, downloadReleaseAsset,
+  updateDevelopmentCheckout,
   isCodexRunning,
   runCli: (node: string, args: string[], root: string, env: NodeJS.ProcessEnv) =>
     execFileSync(node, args, { cwd: root, env, timeout: 10 * 60_000, windowsHide: true }),
 };
 export class UpdateRecoveryError extends Error {}
 
-export async function updatePackage(opts: Opts = {}): Promise<string | undefined> {
+export interface UpdatedPackage { root: string; node: string }
+
+export async function updatePackage(opts: Opts = {}): Promise<UpdatedPackage | undefined> {
   const paths = ensureUserPaths();
   const root = findSourceRoot(dirname(fileURLToPath(import.meta.url)));
   return updatePackageFrom(root, paths, opts);
@@ -33,11 +37,26 @@ export async function updatePackageFrom(
   paths: ReturnType<typeof ensureUserPaths>,
   opts: Opts = {},
   services = updateServices,
-): Promise<string | undefined> {
+): Promise<UpdatedPackage | undefined> {
   if ((opts.repo && opts.repo !== "DOCaCola/CodexDC") || opts.ref) throw new Error("Only published stable CodexDC release packages are supported.");
   if (existsSync(join(root, ".git"))) {
-    if (!opts.quiet) console.log("Development checkout: update source with Git. Release updater is disabled.");
-    return;
+    const config = existsSync(paths.configFile) ? JSON.parse(readFileSync(paths.configFile, "utf8")) : {};
+    if (opts.onLaunch && config.codexPlusPlus?.autoUpdate === false) {
+      // Still report local changes when automatic updates are disabled.
+      services.updateDevelopmentCheckout(root, opts.quiet, false);
+      return;
+    }
+    const oldInstall = readState(paths.stateFile);
+    if (oldInstall && services.isCodexRunning(oldInstall.appRoot)) {
+      if (opts.onLaunch) return;
+      throw new Error("Close CodexDC, then update the development checkout. Active sessions are never restarted.");
+    }
+    if (!services.updateDevelopmentCheckout(root, opts.quiet)) return;
+    if (oldInstall) {
+      services.runCli(process.execPath, [join(root, "packages", "installer", "dist", "cli.js"), "repair", "--force"],
+        root, { ...process.env, CODEXDC_HOME: paths.root });
+    }
+    return { root, node: process.execPath };
   }
   const config = existsSync(paths.configFile) ? JSON.parse(readFileSync(paths.configFile, "utf8")) : {};
   const lastCheck = readSelfUpdateState(paths.selfUpdateStateFile);
@@ -112,7 +131,7 @@ export async function updatePackageFrom(
     renameSync(selectionTemp, join(paths.root, "maintenance-selection.json"));
     diagnostic.sourceRoot = next; diagnostic.status = "updated";
     if (!opts.quiet) console.log(`Updated to ${manifest.version}. Previous package retained at ${root}`);
-    return next;
+    return { root: next, node };
   } catch (error) {
     diagnostic.status = "failed"; diagnostic.error = error instanceof Error ? error.message : String(error); throw error;
   } finally {

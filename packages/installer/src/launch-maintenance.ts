@@ -1,10 +1,11 @@
+import kleur from "kleur";
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { ensureUserPaths } from "./paths.js";
 import { readState } from "./state.js";
 import { isCodexRunning } from "./alerts.js";
 import { repair } from "./commands/repair.js";
-import { updatePackage, UpdateRecoveryError } from "./package-update.js";
+import { updatePackage, UpdateRecoveryError, type UpdatedPackage } from "./package-update.js";
 import { CODEXDC_VERSION } from "./version.js";
 import { updateBackendBeforeLaunch } from "./backend-update.js";
 
@@ -17,7 +18,7 @@ const maintenance = {
   log: console.log,
   report: (error: unknown) => {
     const message = `Patcher update was not applied: ${String(error)}`;
-    console.warn(message);
+    console.warn(kleur.yellow(message));
     appendFileSync(join(ensureUserPaths().logDir, "launch-update.log"), `${new Date().toISOString()} ${message}\n`);
   },
 };
@@ -26,7 +27,7 @@ const maintenance = {
 export async function maintainBeforeLaunch(
   checkForUpdate = true,
   services = maintenance,
-): Promise<string | undefined> {
+): Promise<UpdatedPackage | undefined> {
   const state = services.readInstall();
   if (!state) throw new Error("Install CodexDC first.");
   if (services.isRunning(state.appRoot)) {

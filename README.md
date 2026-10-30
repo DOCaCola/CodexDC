@@ -95,7 +95,12 @@ Dock write the same output to `log/launch.log`.
 
 Turn **Update CodexDC on launch** off in Settings to disable automatic patcher
 updates. Manual updates remain available through **Setup → Update CodexDC**.
-Drafts and prereleases are excluded. Development checkouts use Git.
+Drafts and prereleases are excluded. Clean development checkouts pull their configured
+Git upstream with `--ff-only` on launch, then rebuild and refresh the managed app
+when new commits arrive. Local edits, untracked files or unpublished commits cause
+a yellow warning and skip the pull; startup continues with the local source.
+Git update failures also warn and allow startup to continue. Development Git checks
+are not subject to the release updater's hourly limit.
 There are no scheduled tasks, LaunchAgents or background maintenance services.
 
 Windows refreshes its managed copy from the installed Microsoft Store app.

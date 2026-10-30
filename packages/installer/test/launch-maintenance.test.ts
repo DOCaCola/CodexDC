@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { maintainBeforeLaunch } from "../src/launch-maintenance";
-import { UpdateRecoveryError } from "../src/package-update";
+import { UpdateRecoveryError, type UpdatedPackage } from "../src/package-update";
 import type { InstallerState } from "../src/state";
 import { CODEXDC_VERSION } from "../src/version";
 
@@ -11,7 +11,7 @@ function fixture() {
   const services = {
     readInstall: () => state,
     isRunning: () => false,
-    update: async (): Promise<string | undefined> => { calls.push("update"); return undefined; },
+    update: async (): Promise<UpdatedPackage | undefined> => { calls.push("update"); return undefined; },
     repair: async (force: boolean) => { calls.push(`repair:${force}`); },
     updateBackend: async () => { calls.push("backend"); },
     log: (message: string) => { calls.push(`log:${message}`); },
@@ -35,8 +35,9 @@ test("opening an already-running desktop does not update or repair it", async ()
 
 test("successful update hands launch to the new package without repairing through the old package", async () => {
   const f = fixture();
-  f.services.update = async () => "/new-package";
-  assert.equal(await maintainBeforeLaunch(true, f.services), "/new-package");
+  const next = { root: "/new-package", node: "/new-package/node/node" };
+  f.services.update = async () => next;
+  assert.deepEqual(await maintainBeforeLaunch(true, f.services), next);
   assert.deepEqual(f.calls, []);
 });
 

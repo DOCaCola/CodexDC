@@ -42,6 +42,7 @@ function fixture() {
     latestRelease: async () => { checks++; return release; },
     downloadReleaseAsset: async (_repo: string, asset: ReleaseAsset) => asset.name === name ? bytes : Buffer.from(`${digest}  ${name}\n`),
     isCodexRunning: () => false,
+    updateDevelopmentCheckout: (_root: string, _quiet?: boolean, _pull?: boolean): boolean => false,
     runCli: (_node: string, args: string[], root: string, env: NodeJS.ProcessEnv) => {
       calls.push({ root, args, env });
       if (args[1] === "repair") {
@@ -112,5 +113,34 @@ test("launch respects disabled updates and throttles completed release checks", 
     writeFileSync(f.paths.selfUpdateStateFile, JSON.stringify({ checkedAt: new Date().toISOString() }));
     await updatePackageFrom(f.old, f.paths, { onLaunch: true }, f.services);
     assert.equal(f.checks(), 0);
+  } finally { f.cleanup(); }
+});
+
+
+test("development updates repair from the rebuilt CLI and hand launch to the system Node", async () => {
+  const f = fixture();
+  try {
+    mkdirSync(join(f.old, ".git"));
+    f.services.updateDevelopmentCheckout = (root) => { assert.equal(root, f.old); return true; };
+    const next = await updatePackageFrom(f.old, f.paths, { onLaunch: true }, f.services);
+    assert.deepEqual(next, { root: f.old, node: process.execPath });
+    assert.equal(f.checks(), 0);
+    assert.equal(f.calls.length, 1);
+    assert.deepEqual(f.calls[0].args.slice(1), ["repair", "--force"]);
+    assert.equal(f.calls[0].root, f.old);
+    assert.equal(f.calls[0].env.CODEXDC_HOME, f.root);
+  } finally { f.cleanup(); }
+});
+
+test("local development changes continue startup without release downloads or repair handoff", async () => {
+  const f = fixture();
+  try {
+    mkdirSync(join(f.old, ".git"));
+    let checked = false;
+    f.services.updateDevelopmentCheckout = () => { checked = true; return false; };
+    assert.equal(await updatePackageFrom(f.old, f.paths, { onLaunch: true }, f.services), undefined);
+    assert.equal(checked, true);
+    assert.equal(f.checks(), 0);
+    assert.deepEqual(f.calls, []);
   } finally { f.cleanup(); }
 });
