@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
-import { confirmMacDesktopStartup, isConfirmedMacInstall, pruneMacDesktopReleases, replaceMacRollback, shouldRotateMacBackup } from "../src/mac-desktop-retention.js";
+import { confirmMacDesktopStartup, isConfirmedMacInstall, pruneMacDesktopReleases, replaceMacRollback, retireMacReplacement, shouldRotateMacBackup, sweepRetiredMacArtifacts } from "../src/mac-desktop-retention.js";
 import type { InstallerState } from "../src/state.js";
 
 test("only a confirmed different build replaces an existing last-working backup", () => {
@@ -59,8 +59,39 @@ test("rollback rotation retains one app and its matching runtime/state snapshot"
     assert.equal(readFileSync(join(backup, "build"), "utf8"), "working");
     assert.equal(readFileSync(join(metadata, "state.json"), "utf8"), "working-state");
     assert.equal(existsSync(displaced), false); assert.equal(existsSync(snapshot), false);
-    assert.equal(existsSync(`${displaced}.retired`), false);
+    assert.ok(existsSync(`${displaced}.retired`)); assert.ok(existsSync(`${snapshot}.retired`));
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+test("a first installation retires only its recovery snapshot", () => {
+  const root = mkdtempSync(join(tmpdir(), "codexdc-retention-"));
+  const displaced = join(root, ".CodexDC-replaced-missing.app"), snapshot = join(root, ".mac-recovery-abc");
+  try {
+    mkdirSync(snapshot);
+    retireMacReplacement(displaced, snapshot);
+    assert.ok(existsSync(`${snapshot}.retired`)); assert.equal(existsSync(`${displaced}.retired`), false);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+test("retirement sweep removes generated items and reports failures for a later retry", () => {
+  const root = mkdtempSync(join(tmpdir(), "codexdc-retention-"));
+  const apps = join(root, "Applications"), user = join(root, "codex-dc"), app = join(apps, "CodexDC.app");
+  const retiredApp = join(apps, ".CodexDC-replaced-213da8a5-16cd-49e8-80e4-b95ec0aaa5be.app.retired");
+  const retiredRecovery = join(user, ".mac-recovery-OBm7Td.retired");
+  const unrelated = join(apps, ".CodexDC-replaced-notes.app.retired"), linked = join(user, ".mac-recovery-Link.retired");
+  const locked = join(retiredRecovery, "runtime");
+  try {
+    for (const p of [join(retiredApp, "Contents"), locked, unrelated]) mkdirSync(p, { recursive: true });
+    writeFileSync(join(locked, "file"), "x"); chmodSync(locked, 0o555);
+    symlinkSync(unrelated, linked);
+    const first = sweepRetiredMacArtifacts(app, user);
+    assert.deepEqual(first.removed, [retiredApp]);
+    assert.deepEqual(first.failed.map(f => f.path), [retiredRecovery]);
+    chmodSync(locked, 0o755);
+    assert.deepEqual(sweepRetiredMacArtifacts(app, user), { removed: [retiredRecovery], failed: [] });
+    assert.ok(existsSync(unrelated)); assert.ok(existsSync(linked));
+  } finally {
+    if (existsSync(locked)) chmodSync(locked, 0o755);
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 test("rotation failure preserves the old rollback and displaced current app", () => {
   const root = mkdtempSync(join(tmpdir(), "codexdc-retention-"));

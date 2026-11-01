@@ -11,6 +11,14 @@ import { ensureUserPaths } from "./paths.js";
 import { selectMacSource } from "./mac-source.js";
 
 const WORKING_STATE = "mac-working-state.json";
+const RETIRED_APP_RE = /^\.CodexDC-replaced-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.app\.retired$/;
+const RETIRED_RECOVERY_RE = /^\.mac-recovery-[A-Za-z0-9]+\.retired$/;
+
+export interface RetiredMacCleanup {
+  removed: string[];
+  failed: { path: string; error: string }[];
+}
+
 export function isConfirmedMacInstall(root: string, state: InstallerState): boolean {
   const working = readState(join(root, WORKING_STATE));
   return working?.installedAt === state.installedAt && working.patchedAsarHash === state.patchedAsarHash;
@@ -81,14 +89,15 @@ export function confirmMacDesktopStartup(installedAt: string) {
         if (prepared.build === currentBuild) rmSync(preparedFile);
         else references.push(prepared.app);
       }
-      return pruneMacDesktopReleases(paths.root, references);
+      const releases = pruneMacDesktopReleases(paths.root, references);
+      return { ...releases, retiredCleanup: sweepRetiredMacArtifacts(state.appRoot, paths.root) };
     } finally {
       closeSync(lock); rmSync(lockPath);
     }
   } finally { closeSync(updateLock); rmSync(updateLockPath); }
 }
 
-/** Commit a single rollback snapshot after the replacement app was installed. */
+/** Commit a single rollback snapshot after the replacement app was installed. Deletion is a separate sweep. */
 export function replaceMacRollback(app: string, displaced: string, snapshot: string, root: string): void {
   const backup = `${app}.previous`, metadata = join(root, "desktop-rollback");
   const retiredApp = `${displaced}.retired`, retiredMetadata = `${snapshot}.retired`;
@@ -105,6 +114,34 @@ export function replaceMacRollback(app: string, displaced: string, snapshot: str
     if (existsSync(retiredMetadata)) renameSync(retiredMetadata, metadata);
     throw error;
   }
-  rmSync(retiredApp, { recursive: true, force: true });
-  rmSync(retiredMetadata, { recursive: true, force: true });
+}
+
+/** Retire the replaced app, if this installation replaced one, and its rollback snapshot when the backup is not rotated. */
+export function retireMacReplacement(displaced: string, snapshot: string): void {
+  if (existsSync(displaced)) renameSync(displaced, `${displaced}.retired`);
+  renameSync(snapshot, `${snapshot}.retired`);
+}
+
+/** Remove generated retirements from completed installations; failures remain for the next locked sweep. */
+export function sweepRetiredMacArtifacts(app: string, root: string): RetiredMacCleanup {
+  const result: RetiredMacCleanup = { removed: [], failed: [] };
+  for (const path of [
+    ...retiredDirectories(dirname(app), RETIRED_APP_RE),
+    ...retiredDirectories(root, RETIRED_RECOVERY_RE),
+  ]) {
+    try {
+      rmSync(path, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      result.removed.push(path);
+    } catch (error) {
+      result.failed.push({ path, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return result;
+}
+
+function retiredDirectories(parent: string, pattern: RegExp): string[] {
+  if (!existsSync(parent)) return [];
+  return readdirSync(parent, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && pattern.test(entry.name))
+    .map(entry => join(parent, entry.name));
 }

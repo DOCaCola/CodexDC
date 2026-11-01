@@ -1,4 +1,4 @@
-import { isConfirmedMacInstall, replaceMacRollback, shouldRotateMacBackup } from "./mac-desktop-retention.js";
+import { isConfirmedMacInstall, replaceMacRollback, retireMacReplacement, shouldRotateMacBackup, sweepRetiredMacArtifacts, type RetiredMacCleanup } from "./mac-desktop-retention.js";
 import { selectMacSource } from "./mac-source.js";
 import { AppRunningError } from "./errors.js";
 import { execFileSync } from "node:child_process";
@@ -42,6 +42,7 @@ export async function installManagedMac(opts: { app?: string; downloadedSource?:
   const identity = prepareCodeSigning({ useLocalIdentity: true, identityName: "CodexDC Local Signing" });
   const lockPath = join(paths.root, "managed-install.lock");
   const lock = openSync(lockPath, "wx");
+  reportRetiredCleanup(sweepRetiredMacArtifacts(destination, paths.root), opts.quiet);
   const stage = join(dirname(destination), `.CodexDC-${randomUUID()}.app`);
   const backup = `${destination}.previous`;
   const displaced = join(dirname(destination), `.CodexDC-replaced-${randomUUID()}.app`);
@@ -110,15 +111,19 @@ export async function installManagedMac(opts: { app?: string; downloadedSource?:
     try {
       if (activated) {
         if (rotateBackup) replaceMacRollback(destination, displaced, recovery, paths.root);
-        else {
-          rmSync(displaced, { recursive: true, force: true });
-          rmSync(recovery, { recursive: true, force: true });
-        }
+        else retireMacReplacement(displaced, recovery);
+        reportRetiredCleanup(sweepRetiredMacArtifacts(destination, paths.root), opts.quiet);
       } else rmSync(recovery, { recursive: true, force: true });
     } finally {
       closeSync(lock); rmSync(lockPath, { force: true });
     }
   }
+}
+
+function reportRetiredCleanup(cleanup: RetiredMacCleanup, quiet = false): void {
+  if (quiet || cleanup.failed.length === 0) return;
+  console.warn(`Could not remove ${cleanup.failed.length} retired CodexDC item${cleanup.failed.length === 1 ? "" : "s"}; cleanup will retry after the next successful startup.`);
+  for (const failure of cleanup.failed) console.warn(`  ${failure.path}: ${failure.error}`);
 }
 
 export function uninstallManagedMac(): void {
