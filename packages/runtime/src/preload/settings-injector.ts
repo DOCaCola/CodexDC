@@ -2795,8 +2795,10 @@ function findContentArea(): HTMLElement | null {
   const sidebar = findSidebarItemsGroup();
   if (!sidebar) return null;
   const frame = sidebar.closest("[data-app-shell-frame]");
+  // Codex marks its main content viewport with this layout attribute and
+  // locates it the same way. Generated CSS-module class names are not stable.
   const viewport = frame?.querySelector<HTMLElement>(
-    'main[data-app-shell-main-surface="default"] [class*="_MainContentViewport_"]',
+    'main[data-app-shell-main-surface="default"] [data-app-shell-main-content-layout]',
   );
   return viewport && codexPpVisibleBox(viewport) ? viewport : null;
 }
