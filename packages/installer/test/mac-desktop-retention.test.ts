@@ -71,7 +71,8 @@ test("a first installation retires only its recovery snapshot", () => {
     assert.ok(existsSync(`${snapshot}.retired`)); assert.equal(existsSync(`${displaced}.retired`), false);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
-test("retirement sweep removes generated items and reports failures for a later retry", () => {
+// The failed removal is produced with POSIX directory permissions, which Windows does not enforce.
+test("retirement sweep removes generated items and reports failures for a later retry", { skip: process.platform === "win32" }, () => {
   const root = mkdtempSync(join(tmpdir(), "codexdc-retention-"));
   const apps = join(root, "Applications"), user = join(root, "codex-dc"), app = join(apps, "CodexDC.app");
   const retiredApp = join(apps, ".CodexDC-replaced-213da8a5-16cd-49e8-80e4-b95ec0aaa5be.app.retired");
