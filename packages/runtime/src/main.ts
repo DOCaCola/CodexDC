@@ -17,6 +17,7 @@ import chokidar from "chokidar";
 import { selectTweakSource } from "./store-source";
 import * as tar from "tar";
 import { discoverTweaks, type DiscoveredTweak } from "./tweak-discovery";
+import { replacedStoreTweaks, retireReplacedTweaks } from "./tweak-replacement";
 import { installedTweakSource, pullDevelopmentCheckout, STORE_INSTALL_METADATA_FILE } from "./tweak-install-source";
 import { createDiskStorage, type DiskStorage } from "./storage";
 import { syncManagedMcpServers } from "./mcp-sync";
@@ -674,7 +675,10 @@ ipcMain.handle("codexpp:get-tweak-store", async () => {
     sourceUrl: TWEAK_STORE_INDEX_URL,
     fetchedAt: store.fetchedAt,
     entries: entries.map((entry) => {
-      const local = installed.get(entry.id);
+      // A Store install under an id this entry replaces counts as an older
+      // install of it until installing the entry retires the replaced tweak.
+      const replaced = replacedStoreTweaks(entry, tweakState.discovered);
+      const local = installed.get(entry.id) ?? replaced[0];
       const platform = storeEntryPlatformCompatibility(entry);
       const runtime = storeEntryRuntimeCompatibility(entry);
       const source = local ? installedTweakSource(local.dir) : null;
@@ -689,7 +693,8 @@ ipcMain.handle("codexpp:get-tweak-store", async () => {
               enabled: isTweakEnabled(local.manifest.id),
               source: source.kind,
               checkout: source.kind === "development" ? source.checkout : null,
-              status: versionOrder > 0 ? "update" : versionOrder < 0 ? "ahead" : "current",
+              status: replaced.length > 0 || versionOrder > 0 ? "update" : versionOrder < 0 ? "ahead" : "current",
+              replaces: replaced.map((tweak) => ({ name: tweak.manifest.name, version: tweak.manifest.version })),
             }
           : null,
       };
@@ -703,7 +708,15 @@ ipcMain.handle("codexpp:install-store-tweak", async (_e, id: string) => {
   if (!entry) throw new Error(`Tweak store entry not found: ${id}`);
   assertStoreEntryPlatformCompatible(entry);
   assertStoreEntryRuntimeCompatible(entry);
+  const replaced = replacedStoreTweaks(entry, tweakState.discovered);
   await installStoreTweak(entry);
+  if (replaced.length > 0) {
+    stopAllMainTweaks();
+    const state = readState();
+    retireReplacedTweaks(entry.id, replaced, join(userRoot!, "tweak-data"), state);
+    writeState(state);
+    log("info", `${entry.id} replaced ${replaced.map((tweak) => tweak.manifest.id).join(", ")}`);
+  }
   reloadTweaks("store-install", tweakLifecycleDeps);
   return { installed: entry.id };
 });

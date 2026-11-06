@@ -27,6 +27,7 @@ runtime compatibility.
 | `main` | `string` | Entry file relative to the tweak directory. |
 | `mcp` | `TweakMcpServer` | Declares an MCP server managed by CodexDC. |
 | `permissions` | `TweakPermission[]` | Declared capabilities shown to users/validators. Native bridge permissions are enforced at runtime. |
+| `replaces` | `string[]` | Ids this tweak was previously published under. The Tweak Store offers a Store install of one of those ids from the same repository as an update; installing replaces it and keeps its enabled state and tweak data. |
 
 ## Full Example
 

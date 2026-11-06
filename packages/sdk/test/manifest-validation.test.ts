@@ -28,6 +28,15 @@ test("validateTweakManifest accepts a manifest without githubRepo", () => {
   assert.deepEqual(result.errors, []);
 });
 
+test("validateTweakManifest checks the ids a tweak replaces", () => {
+  const manifest = { id: "com.example.tweak", name: "Example Tweak", version: "0.2.0" };
+  assert.equal(validateTweakManifest({ ...manifest, replaces: ["com.example.old-tweak"] }).ok, true);
+  assert.deepEqual(validateTweakManifest({ ...manifest, replaces: "com.example.old-tweak" }).errors,
+    [{ path: "replaces", message: "replaces must be an array of tweak ids" }]);
+  assert.deepEqual(validateTweakManifest({ ...manifest, replaces: ["com.example.tweak"] }).errors,
+    [{ path: "replaces", message: "replaces must not include the tweak's own id" }]);
+});
+
 test("validateTweakManifest accepts Owl bridge permissions", () => {
   const result = validateTweakManifest({
     id: "com.example.native-tweak",

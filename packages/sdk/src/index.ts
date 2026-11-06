@@ -49,6 +49,12 @@ export interface TweakManifest {
   mcp?: TweakMcpServer;
   /** Optional declared capabilities shown to users and validators. */
   permissions?: TweakPermission[];
+  /**
+   * Ids this tweak was previously published under. Installing it from the
+   * Tweak Store replaces Store installs of those ids from the same repository
+   * and carries over their enabled state and data.
+   */
+  replaces?: string[];
 }
 
 export type TweakScope = "renderer" | "main" | "both";
@@ -189,6 +195,17 @@ export function validateTweakManifest(manifest: unknown): TweakManifestValidatio
         path: "permissions",
         message: "permissions must be known CodexDC permission strings",
       });
+    }
+  }
+
+  if (manifest.replaces !== undefined) {
+    if (
+      !Array.isArray(manifest.replaces) ||
+      !manifest.replaces.every((id) => typeof id === "string" && /^[a-zA-Z0-9._-]+$/.test(id))
+    ) {
+      errors.push({ path: "replaces", message: "replaces must be an array of tweak ids" });
+    } else if (manifest.replaces.includes(manifest.id)) {
+      errors.push({ path: "replaces", message: "replaces must not include the tweak's own id" });
     }
   }
 

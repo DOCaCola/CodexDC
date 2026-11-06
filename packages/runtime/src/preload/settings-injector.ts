@@ -118,6 +118,8 @@ interface TweakStoreEntryView extends TweakStoreEntry {
     source: "store" | "development" | "manual";
     checkout: string | null;
     status: "update" | "current" | "ahead";
+    /** Installed tweaks this entry replaces under its earlier ids. */
+    replaces: { name: string; version: string }[];
   } | null;
   platform?: {
     current: string;
@@ -2032,17 +2034,22 @@ function tweakStoreVersionBadge(entry: TweakStoreEntryView, installedOverride?: 
   const installed = installedOverride ?? entry.installed?.version ?? null;
   const latest = entry.manifest.version;
   const hasUpdate = installedOverride === undefined && hasStoreUpdate(entry);
+  const replaced = installedOverride === undefined ? entry.installed?.replaces[0] : undefined;
   const badge = storeVersionBadgeShell(hasUpdate);
   const label = document.createElement("span");
   label.className = "truncate";
-  label.textContent = hasUpdate
-    ? `Installed v${installed} → v${latest}`
+  label.textContent = replaced
+    ? `Replaces ${replaced.name} v${replaced.version} → v${latest}`
+    : hasUpdate
+      ? `Installed v${installed} → v${latest}`
+      : installed
+        ? `Installed v${installed} · Store v${latest}`
+        : `Store v${latest}`;
+  badge.title = replaced
+    ? `Installed as ${replaced.name} ${replaced.version}. Updating installs ${entry.manifest.name} ${latest} in its place and keeps its settings.`
     : installed
-      ? `Installed v${installed} · Store v${latest}`
-      : `Store v${latest}`;
-  badge.title = installed
-    ? `Installed version ${installed}. Approved Store version ${latest}.`
-    : `Approved Store version ${latest}.`;
+      ? `Installed version ${installed}. Approved Store version ${latest}.`
+      : `Approved Store version ${latest}.`;
   badge.appendChild(label);
   return badge;
 }
