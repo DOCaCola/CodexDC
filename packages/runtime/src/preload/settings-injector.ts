@@ -1579,7 +1579,9 @@ function renderTweakStoreGrid(grid: HTMLElement, source: HTMLElement): void {
     grid.appendChild(storeMessageCard("No tweaks yet", "Use Publish Tweak to submit the first one."));
     return;
   }
-  for (const entry of entries) grid.appendChild(tweakStoreCard(entry));
+  // Installed tweaks with updates come first; the shuffled Store order is kept otherwise.
+  const ordered = [...entries].sort((a, b) => Number(hasStoreUpdate(b)) - Number(hasStoreUpdate(a)));
+  for (const entry of ordered) grid.appendChild(tweakStoreCard(entry));
 }
 
 function parseStoreDataset(grid: HTMLElement): TweakStoreRegistryView | null {
@@ -1593,16 +1595,22 @@ function parseStoreDataset(grid: HTMLElement): TweakStoreRegistryView | null {
 }
 
 function tweakStoreCard(entry: TweakStoreEntryView): HTMLElement {
-  const shell = tweakStoreCardShell();
+  const installed = entry.installed;
+  const hasUpdate = hasStoreUpdate(entry);
+  const shell = tweakStoreCardShell(hasUpdate);
   const { card, left, stack, versions, actions } = shell;
 
   left.insertBefore(storeAvatar(entry), stack);
 
   const titleRow = tweakStoreTitleRow();
+  const heading = document.createElement("div");
+  heading.className = "flex min-w-0 flex-wrap items-center gap-2";
   const title = document.createElement("div");
   title.className = "min-w-0 break-words text-base font-medium text-default";
   title.textContent = entry.manifest.name;
-  titleRow.appendChild(title);
+  heading.appendChild(title);
+  if (hasUpdate) heading.appendChild(storeUpdateBadge());
+  titleRow.appendChild(heading);
   titleRow.appendChild(verifiedSafeBadge());
   stack.appendChild(titleRow);
 
@@ -1622,8 +1630,6 @@ function tweakStoreCard(entry: TweakStoreEntryView): HTMLElement {
       }),
     );
   }
-  const installed = entry.installed;
-  const hasUpdate = installed?.status === "update";
   if (installed?.source === "development") {
     appendDevelopmentStoreActions(entry, installed, card, versions, actions);
   } else if (installed?.source === "manual" && hasUpdate) {
@@ -1642,7 +1648,6 @@ function tweakStoreCard(entry: TweakStoreEntryView): HTMLElement {
     actions.appendChild(storeStatusPill(runtimeLockedLabel(entry.runtime)));
   } else {
     const installLabel = entry.installed ? "Update" : "Install";
-    if (hasUpdate) actions.appendChild(storeStatusPill("Update available", "info"));
     const installButton = storeInstallButton(installLabel, (button) => {
       const grid = card.closest("[data-codexpp-store-grid]") as HTMLElement | null;
       const source = grid?.parentElement?.querySelector("[data-codexpp-store-source]") as HTMLElement | null;
@@ -1653,6 +1658,8 @@ function tweakStoreCard(entry: TweakStoreEntryView): HTMLElement {
         .then(() => {
           showStoreCardMessage(card, `${entry.manifest.name} installed.`);
           showStoreButtonInstalled(button);
+          card.className = tweakStoreCardClass(false);
+          card.querySelector("[data-codexpp-store-update-label]")?.remove();
           versions.replaceChildren(tweakStoreVersionBadge(entry, entry.manifest.version));
           updateStoreUpdateBadge(Math.max(0, currentStoreUpdateBadgeCount() - 1));
           setTimeout(() => {
@@ -1684,7 +1691,6 @@ function appendDevelopmentStoreActions(
     actions.appendChild(linked);
     return;
   }
-  actions.appendChild(storeStatusPill("Update available", "info"));
   const pullButton = storeInstallButton("Pull from upstream", (button) => {
     const grid = card.closest("[data-codexpp-store-grid]") as HTMLElement | null;
     const source = grid?.parentElement?.querySelector("[data-codexpp-store-source]") as HTMLElement | null;
@@ -1741,7 +1747,12 @@ function showStoreCardMessage(card: HTMLElement, message: string): void {
   else card.appendChild(notice);
 }
 
-function tweakStoreCardShell(): {
+function tweakStoreCardClass(hasUpdate: boolean): string {
+  const tone = hasUpdate ? "border-blue bg-info-surface" : "border-default bg-surface-card";
+  return `${tone} flex flex-col gap-4 rounded-2xl border p-4`;
+}
+
+function tweakStoreCardShell(hasUpdate: boolean): {
   card: HTMLElement;
   left: HTMLElement;
   stack: HTMLElement;
@@ -1749,8 +1760,7 @@ function tweakStoreCardShell(): {
   actions: HTMLElement;
 } {
   const card = document.createElement("div");
-  card.className =
-    "border-default bg-surface-card flex flex-col gap-4 rounded-2xl border p-4";
+  card.className = tweakStoreCardClass(hasUpdate);
 
   const left = document.createElement("div");
   left.className = "flex min-w-0 flex-1 items-start gap-3";
@@ -1809,7 +1819,7 @@ function renderTweakStoreGhostGrid(grid: HTMLElement): void {
 }
 
 function tweakStoreGhostCard(): HTMLElement {
-  const { card, left, stack, versions, actions } = tweakStoreCardShell();
+  const { card, left, stack, versions, actions } = tweakStoreCardShell(false);
   card.classList.add("pointer-events-none");
   card.setAttribute("aria-hidden", "true");
 
@@ -1968,7 +1978,11 @@ function currentStoreUpdateBadgeCount(): number {
 }
 
 function outdatedInstalledStoreCount(entries: TweakStoreEntryView[]): number {
-  return entries.filter((entry) => entry.installed?.status === "update").length;
+  return entries.filter(hasStoreUpdate).length;
+}
+
+function hasStoreUpdate(entry: TweakStoreEntryView): boolean {
+  return entry.installed?.status === "update";
 }
 
 function storeToolbarButton(
@@ -2017,13 +2031,15 @@ function verifiedSafeBadge(): HTMLElement {
 function tweakStoreVersionBadge(entry: TweakStoreEntryView, installedOverride?: string): HTMLElement {
   const installed = installedOverride ?? entry.installed?.version ?? null;
   const latest = entry.manifest.version;
-  const hasUpdate = installedOverride === undefined && entry.installed?.status === "update";
+  const hasUpdate = installedOverride === undefined && hasStoreUpdate(entry);
   const badge = storeVersionBadgeShell(hasUpdate);
   const label = document.createElement("span");
   label.className = "truncate";
-  label.textContent = installed
-    ? `Installed v${installed} · Store v${latest}`
-    : `Store v${latest}`;
+  label.textContent = hasUpdate
+    ? `Installed v${installed} → v${latest}`
+    : installed
+      ? `Installed v${installed} · Store v${latest}`
+      : `Store v${latest}`;
   badge.title = installed
     ? `Installed version ${installed}. Approved Store version ${latest}.`
     : `Approved Store version ${latest}.`;
@@ -2033,13 +2049,25 @@ function tweakStoreVersionBadge(entry: TweakStoreEntryView, installedOverride?: 
 
 function storeVersionBadgeShell(hasUpdate: boolean): HTMLElement {
   const badge = document.createElement("span");
-  badge.className = `inline-flex min-w-0 max-w-full items-center text-xs ${hasUpdate ? "text-default" : "text-secondary"}`;
+  badge.className = `inline-flex min-w-0 max-w-full items-center text-xs ${hasUpdate ? "font-medium text-info" : "text-secondary"}`;
   return badge;
 }
 
-function storeStatusPill(label: string, tone: "neutral" | "info" = "neutral"): HTMLElement {
+function storeUpdateBadge(): HTMLElement {
+  const badge = document.createElement("span");
+  badge.dataset.codexppStoreUpdateLabel = "true";
+  badge.className = "inline-flex shrink-0 items-center gap-1 rounded-md bg-info-soft px-2 py-0.5 text-xs font-medium text-info";
+  badge.innerHTML =
+    `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">` +
+    `<path d="M8 12.5V3.75M4.25 7.5 8 3.75l3.75 3.75" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>` +
+    `</svg>` +
+    `<span>Update available</span>`;
+  return badge;
+}
+
+function storeStatusPill(label: string): HTMLElement {
   const status = document.createElement("span");
-  status.className = `inline-flex items-center whitespace-nowrap text-sm ${tone === "info" ? "text-default" : "text-secondary"}`;
+  status.className = "inline-flex items-center whitespace-nowrap text-sm text-secondary";
   status.textContent = label;
   return status;
 }
