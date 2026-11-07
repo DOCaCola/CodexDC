@@ -19,6 +19,7 @@ import * as tar from "tar";
 import { discoverTweaks, type DiscoveredTweak } from "./tweak-discovery";
 import { replacedStoreTweaks, retireReplacedTweaks } from "./tweak-replacement";
 import { installedTweakSource, pullDevelopmentCheckout, STORE_INSTALL_METADATA_FILE } from "./tweak-install-source";
+import { replaceStoreTweak, TweakFileUpdates } from "./tweak-file-update";
 import { createDiskStorage, type DiskStorage } from "./storage";
 import { syncManagedMcpServers } from "./mcp-sync";
 import {
@@ -76,6 +77,7 @@ if (!userRoot || !runtimeDir) {
 
 const PRELOAD_PATH = resolve(runtimeDir, "preload.js");
 const TWEAKS_DIR = join(userRoot, "tweaks");
+const tweakFileUpdates = new TweakFileUpdates();
 const LOG_DIR = join(userRoot, "log");
 const LOG_FILE = join(LOG_DIR, "main.log");
 const CONFIG_FILE = join(userRoot, "config.json");
@@ -376,7 +378,7 @@ if (process.platform === "win32") require(join(runtimeDir!, "platform/windows/in
 if (process.platform === "darwin") require(join(runtimeDir!, "platform/macos/index.js")).start({ log: makeLogger("macos-update") });
 
 interface LoadedMainTweak {
-  stop?: () => void;
+  stop?: () => void | Promise<void>;
   storage: DiskStorage;
 }
 
@@ -606,9 +608,9 @@ ipcMain.handle("codexpp:list-tweaks", async () => {
 });
 
 ipcMain.handle("codexpp:get-tweak-enabled", (_e, id: string) => isTweakEnabled(id));
-ipcMain.handle("codexpp:set-tweak-enabled", (_e, id: string, enabled: boolean) => {
+ipcMain.handle("codexpp:set-tweak-enabled", (_e, id: string, enabled: boolean) => tweakFileUpdates.run(() => {
   return setTweakEnabledAndReload(id, enabled, tweakLifecycleDeps);
-});
+}));
 
 ipcMain.handle("codexpp:get-config", () => {
   const s = readState();
@@ -707,26 +709,24 @@ ipcMain.handle("codexpp:get-tweak-store", async () => {
   };
 });
 
-ipcMain.handle("codexpp:install-store-tweak", async (_e, id: string) => {
+ipcMain.handle("codexpp:install-store-tweak", (_e, id: string) => tweakFileUpdates.run(async () => {
   const { registry } = await fetchTweakStoreRegistry();
   const entry = registry.entries.find((candidate) => candidate.id === id);
   if (!entry) throw new Error(`Tweak store entry not found: ${id}`);
   assertStoreEntryPlatformCompatible(entry);
   assertStoreEntryRuntimeCompatible(entry);
   const replaced = replacedStoreTweaks(entry, tweakState.discovered);
-  await installStoreTweak(entry);
-  if (replaced.length > 0) {
-    stopAllMainTweaks();
+  await installStoreTweak(entry, () => {
+    if (replaced.length === 0) return;
     const state = readState();
     retireReplacedTweaks(entry.id, replaced, join(userRoot!, "tweak-data"), state);
     writeState(state);
     log("info", `${entry.id} replaced ${replaced.map((tweak) => tweak.manifest.id).join(", ")}`);
-  }
-  reloadTweaks("store-install", tweakLifecycleDeps);
+  });
   return { installed: entry.id };
-});
+}));
 
-ipcMain.handle("codexpp:pull-development-tweak", async (_e, id: string) => {
+ipcMain.handle("codexpp:pull-development-tweak", (_e, id: string) => tweakFileUpdates.run(async () => {
   const tweak = tweakState.discovered.find((t) => t.manifest.id === id);
   if (!tweak) throw new Error(`Tweak is not installed: ${id}`);
   const source = installedTweakSource(tweak.dir);
@@ -739,7 +739,7 @@ ipcMain.handle("codexpp:pull-development-tweak", async (_e, id: string) => {
   reloadTweaks("development-pull", tweakLifecycleDeps);
   const version = tweakState.discovered.find((t) => t.manifest.id === id)?.manifest.version ?? null;
   return { ...result, version };
-});
+}));
 
 ipcMain.handle("codexpp:prepare-tweak-store-submission", async (_e, repoInput: string) => {
   return prepareTweakStoreSubmission(repoInput);
@@ -891,9 +891,9 @@ ipcMain.handle("codexpp:native-module-dispose", (_e, tweakId: string, moduleId: 
   assertTweakPermissionForId(tweakId, "native-module");
   return nativeBridge.disposeModule(tweakId, moduleId);
 });
-ipcMain.handle("codexpp:native-dispose-tweak", (_e, tweakId: string) => {
+ipcMain.handle("codexpp:native-dispose-tweak", async (_e, tweakId: string) => {
   assertTweakId(tweakId);
-  nativeBridge.disposeTweak(tweakId);
+  await nativeBridge.disposeTweak(tweakId);
 });
 ipcMain.handle(
   "codexpp:native-create-panel",
@@ -950,10 +950,10 @@ ipcMain.handle("codexpp:copy-text", (_e, text: string) => {
 
 // Manual force-reload trigger from the renderer (e.g. the "Force Reload"
 // button on our injected Tweaks page). Bypasses the watcher debounce.
-ipcMain.handle("codexpp:reload-tweaks", () => {
+ipcMain.handle("codexpp:reload-tweaks", () => tweakFileUpdates.run(() => {
   reloadTweaks("manual", tweakLifecycleDeps);
   return { at: Date.now(), count: tweakState.discovered.length };
-});
+}));
 
 // 4. Filesystem watcher → debounced reload + broadcast.
 //    We watch the tweaks dir for any change. On the first tick of inactivity
@@ -962,7 +962,9 @@ ipcMain.handle("codexpp:reload-tweaks", () => {
 //    can re-init its host.
 const RELOAD_DEBOUNCE_MS = 250;
 let reloadTimer: NodeJS.Timeout | null = null;
+let tweakWatcher: ReturnType<typeof chokidar.watch> | null = null;
 function scheduleReload(reason: string): void {
+  if (tweakFileUpdates.reloadsPaused) return;
   if (reloadTimer) clearTimeout(reloadTimer);
   reloadTimer = setTimeout(() => {
     reloadTimer = null;
@@ -970,21 +972,34 @@ function scheduleReload(reason: string): void {
   }, RELOAD_DEBOUNCE_MS);
 }
 
-try {
-  const watcher = chokidar.watch(TWEAKS_DIR, {
-    ignoreInitial: true,
-    // Wait for files to settle before triggering — guards against partially
-    // written tweak files during editor saves / git checkouts.
-    awaitWriteFinish: { stabilityThreshold: 150, pollInterval: 50 },
-    // Avoid eating CPU on huge node_modules trees inside tweak folders.
-    ignored: (p) => p.includes(`${TWEAKS_DIR}/`) && /\/node_modules\//.test(p),
-  });
-  watcher.on("all", (event, path) => scheduleReload(`${event} ${path}`));
-  watcher.on("error", (e) => log("warn", "watcher error:", e));
-  log("info", "watching", TWEAKS_DIR);
-  app.on("will-quit", () => watcher.close().catch(() => {}));
-} catch (e) {
-  log("error", "failed to start watcher:", e);
+function startTweakWatcher(): void {
+  try {
+    const watcher = chokidar.watch(TWEAKS_DIR, {
+      ignoreInitial: true,
+      // Wait for files to settle before triggering — guards against partially
+      // written tweak files during editor saves / git checkouts.
+      awaitWriteFinish: { stabilityThreshold: 150, pollInterval: 50 },
+      // Avoid eating CPU on huge node_modules trees inside tweak folders.
+      ignored: (p) => relative(TWEAKS_DIR, p).split(/[/\\]/)
+        .some((part) => part === "node_modules" || part.startsWith(".install-")),
+    });
+    tweakWatcher = watcher;
+    watcher.on("all", (event, path) => scheduleReload(`${event} ${path}`));
+    watcher.on("error", (e) => log("warn", "watcher error:", e));
+    log("info", "watching", TWEAKS_DIR);
+  } catch (e) {
+    log("error", "failed to start watcher:", e);
+  }
+}
+startTweakWatcher();
+app.on("will-quit", () => tweakWatcher?.close().catch(() => {}));
+
+async function closeTweakWatcher(): Promise<void> {
+  if (reloadTimer) clearTimeout(reloadTimer);
+  reloadTimer = null;
+  const watcher = tweakWatcher;
+  tweakWatcher = null;
+  await watcher?.close();
 }
 
 // --- helpers ---
@@ -1065,11 +1080,28 @@ function stopAllMainTweaks(): void {
     } catch (e) {
       log("warn", `stop failed for ${id}:`, e);
     } finally {
-      nativeBridge.disposeTweak(id);
+      void nativeBridge.disposeTweak(id).catch((error) => log("warn", `native teardown failed for ${id}:`, error));
       disposeOwlViewsForTweak(id);
     }
   }
   tweakState.loadedMain.clear();
+}
+
+async function stopMainTweaksForStoreUpdate(): Promise<void> {
+  const pending = [...tweakState.loadedMain].map(async ([id, tweak]) => {
+    try {
+      await tweak.stop?.();
+      tweak.storage.flush();
+    } finally {
+      await nativeBridge.disposeTweak(id);
+      disposeOwlViewsForTweak(id);
+    }
+  });
+  // Await every teardown even if one rejects; do not replace files on failure.
+  const results = await Promise.allSettled(pending);
+  tweakState.loadedMain.clear();
+  const errors = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+  if (errors.length) throw new AggregateError(errors.map((r) => r.reason), "Could not stop tweaks before Store update.");
 }
 
 function clearTweakModuleCache(): void {
@@ -1350,7 +1382,7 @@ async function fetchTweakStoreRegistry(): Promise<TweakStoreFetchResult> {
   }
 }
 
-async function installStoreTweak(entry: TweakStoreEntry): Promise<void> {
+async function installStoreTweak(entry: TweakStoreEntry, retireReplaced: () => void): Promise<void> {
   const url = storeArchiveUrl(entry);
   const work = mkdtempSync(join(tmpdir(), "codexpp-store-tweak-"));
   const archive = join(work, "source.tar.gz");
@@ -1393,17 +1425,15 @@ async function installStoreTweak(entry: TweakStoreEntry): Promise<void> {
       ),
     );
     await assertStoreTweakCleanForAutoUpdate(entry, target, work);
-    const activation = mkdtempSync(join(TWEAKS_DIR, ".install-"));
-    const next = join(activation, "next");
-    const previous = join(activation, "previous");
-    try {
-      cpSync(stagedTarget, next, { recursive: true });
-      if (existsSync(target)) renameSync(target, previous);
-      try { renameSync(next, target); } catch (error) {
-        if (existsSync(previous)) renameSync(previous, target);
-        throw error;
-      }
-    } finally { rmSync(activation, { recursive: true, force: true }); }
+    await tweakFileUpdates.activate(() => {
+      replaceStoreTweak(stagedTarget, target, TWEAKS_DIR);
+      retireReplaced();
+    }, {
+      closeWatcher: closeTweakWatcher,
+      stopTweaks: stopMainTweaksForStoreUpdate,
+      reloadTweaks: () => reloadTweaks("store-install", tweakLifecycleDeps),
+      startWatcher: startTweakWatcher,
+    });
   } finally {
     rmSync(work, { recursive: true, force: true });
   }

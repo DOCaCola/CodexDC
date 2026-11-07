@@ -67,6 +67,7 @@ export class NativeBridge {
   private modules = new Map<string, LoadedNativeModule>();
   private instances = new Map<string, NativeInstance>();
   private helpers = new Map<string, NativeHelperProcess>();
+  private disposals = new Map<string, Promise<void>>();
   private nativeHostExports: unknown | null = null;
   private nativeHostLoadError: Error | null = null;
 
@@ -187,21 +188,46 @@ export class NativeBridge {
     return this.helperRef(ctx.id, id, child.pid ?? -1);
   }
 
-  disposeTweak(tweakId: string): void {
+  disposeTweak(tweakId: string): Promise<void> {
+    const previous = this.disposals.get(tweakId);
+    const disposal = (previous
+      ? previous.then(() => this.disposeTweakResources(tweakId))
+      : this.disposeTweakResources(tweakId)
+    ).finally(() => {
+      if (this.disposals.get(tweakId) === disposal) this.disposals.delete(tweakId);
+    });
+    this.disposals.set(tweakId, disposal);
+    return disposal;
+  }
+
+  private async disposeTweakResources(tweakId: string): Promise<void> {
+    const pending: Promise<unknown>[] = [];
     for (const [key, instance] of [...this.instances]) {
       if (instance.tweakId !== tweakId) continue;
-      void this.disposeInstance(instance).finally(() => this.instances.delete(key));
+      pending.push(this.disposeInstance(instance).finally(() => this.instances.delete(key)));
     }
     for (const [key, helper] of [...this.helpers]) {
       if (helper.tweakId !== tweakId) continue;
-      this.stopHelper(helper);
+      pending.push(new Promise<void>((resolve, reject) => {
+        if (helper.child.exitCode !== null || helper.child.signalCode !== null) { resolve(); return; }
+        const timer = setTimeout(() => {
+          helper.child.removeListener("exit", exited);
+          reject(new Error(`Native helper ${tweakId}:${helper.id} did not exit before tweak update.`));
+        }, 5000);
+        const exited = () => { clearTimeout(timer); resolve(); };
+        helper.child.once("exit", exited);
+        this.stopHelper(helper);
+      }));
       this.helpers.delete(key);
     }
     for (const [key, mod] of [...this.modules]) {
       if (mod.tweakId !== tweakId) continue;
-      void callOptional(mod.exports, "dispose", []);
+      pending.push(callOptional(mod.exports, "dispose", []));
       this.modules.delete(key);
     }
+    const results = await Promise.allSettled(pending);
+    const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (failed.length) throw new AggregateError(failed.map((r) => r.reason), `Native teardown failed for ${tweakId}`);
   }
 
   disposeAll(): void {
@@ -210,7 +236,9 @@ export class NativeBridge {
       ...[...this.instances.values()].map((item) => item.tweakId),
       ...[...this.helpers.values()].map((item) => item.tweakId),
     ]);
-    for (const id of tweakIds) this.disposeTweak(id);
+    for (const id of tweakIds) {
+      void this.disposeTweak(id).catch((error) => this.log("warn", `native teardown failed for ${id}`, error));
+    }
   }
 
   async callInstance(
