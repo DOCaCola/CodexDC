@@ -29,11 +29,19 @@ import type {
 } from "@codexdc/sdk";
 import {
   buildTweakPublishIssueUrl,
-  type TweakStoreEntry,
   type TweakStorePublishSubmission,
 } from "../tweak-store";
+import {
+  createTweakStoreClient,
+  hasStoreUpdate,
+  type TweakStoreEntryView,
+  type TweakStoreRegistryView,
+} from "./tweak-store-client";
 
 const CODEXDC_RELEASES_URL = "https://github.com/DOCaCola/CodexDC/releases";
+
+/** The live Tweak Store catalog shared with the navigation rail. */
+export const tweakStore = createTweakStoreClient(() => ipcRenderer.invoke("codexpp:get-tweak-store"));
 
 // Mirrors the runtime's main-side ListedTweak shape (kept in sync manually).
 interface ListedTweak {
@@ -103,38 +111,6 @@ interface InstallationSource {
   detail: string;
 }
 
-interface TweakStoreRegistryView {
-  schemaVersion: 1;
-  generatedAt?: string;
-  sourceUrl: string;
-  fetchedAt: string;
-  entries: TweakStoreEntryView[];
-}
-
-interface TweakStoreEntryView extends TweakStoreEntry {
-  installed: {
-    version: string;
-    enabled: boolean;
-    source: "store" | "development" | "manual";
-    checkout: string | null;
-    status: "update" | "current" | "ahead";
-    /** Installed tweaks this entry replaces under its earlier ids. */
-    replaces: { name: string; version: string }[];
-  } | null;
-  platform?: {
-    current: string;
-    supported: string[] | null;
-    compatible: boolean;
-    reason: string | null;
-  };
-  runtime?: {
-    current: string;
-    required: string | null;
-    compatible: boolean;
-    reason: string | null;
-  };
-}
-
 /**
  * A tweak-registered page. We carry the owning tweak's manifest so we can
  * resolve relative iconUrls and show authorship in the page header.
@@ -176,13 +152,12 @@ interface InjectorState {
   fingerprint: string | null;
   sidebarDumped: boolean;
   activePage: ActivePage | null;
+  /** Page to open once Settings shows its sidebar and content. */
+  pendingPage: ActivePage | null;
   sidebarRoot: HTMLElement | null;
   sidebarRestoreHandler: ((e: Event) => void) | null;
   settingsSurfaceVisible: boolean;
   settingsSurfaceHideTimer: ReturnType<typeof setTimeout> | null;
-  tweakStore: TweakStoreRegistryView | null;
-  tweakStorePromise: Promise<TweakStoreRegistryView> | null;
-  tweakStoreError: unknown;
 }
 
 const state: InjectorState = {
@@ -200,13 +175,11 @@ const state: InjectorState = {
   fingerprint: null,
   sidebarDumped: false,
   activePage: null,
+  pendingPage: null,
   sidebarRoot: null,
   sidebarRestoreHandler: null,
   settingsSurfaceVisible: false,
   settingsSurfaceHideTimer: null,
-  tweakStore: null,
-  tweakStorePromise: null,
-  tweakStoreError: null,
 };
 
 function plog(msg: string, extra?: unknown): void {
@@ -229,6 +202,7 @@ function safeStringify(v: unknown): string {
 export function startSettingsInjector(): void {
   if (state.observer) return;
 
+  tweakStore.subscribe(updateStoreUpdateBadge);
   const obs = new MutationObserver(scheduleInjection);
   obs.observe(document.documentElement, { childList: true, subtree: true });
   state.observer = obs;
@@ -280,6 +254,13 @@ function onDocumentClick(e: MouseEvent): void {
   setTimeout(() => {
     setSettingsSurfaceVisible(false, "back-to-app");
   }, 0);
+}
+
+/** Opens Codex's Settings and shows the Tweak Store once Settings has mounted. */
+export async function openTweakStore(): Promise<void> {
+  state.pendingPage = { kind: "store" };
+  await ipcRenderer.invoke("codexpp:open-settings");
+  scheduleInjection();
 }
 
 export function registerSection(section: SettingsSection): SettingsHandle {
@@ -362,13 +343,19 @@ export function setListedTweaks(list: ListedTweak[]): void {
 // ───────────────────────────────────────────────────────────── injection ──
 
 function tryInject(): void {
+  if (!injectSettingsNav() || !state.pendingPage) return;
+  if (activatePage(state.pendingPage)) state.pendingPage = null;
+}
+
+/** Returns whether the Settings sidebar is present and carries our navigation. */
+function injectSettingsNav(): boolean {
   removeMisplacedSettingsGroups();
 
   const itemsGroup = findSidebarItemsGroup();
   if (!itemsGroup) {
     scheduleSettingsSurfaceHidden();
     plog("sidebar not found");
-    return;
+    return false;
   }
   if (state.settingsSurfaceHideTimer) {
     clearTimeout(state.settingsSurfaceHideTimer);
@@ -385,7 +372,7 @@ function tryInject(): void {
     // If one of our pages is active, re-strip Codex's active styling so
     // General doesn't reappear as selected.
     if (state.activePage !== null) syncCodexNativeNavActive(true);
-    return;
+    return true;
   }
 
   // Sidebar was either freshly mounted (Settings just opened) or re-mounted
@@ -417,7 +404,7 @@ function tryInject(): void {
     syncPagesGroup();
     refreshSidebarCodexPlusPlusUpdateButton();
     if (state.activePage !== null) syncCodexNativeNavActive(true);
-    return;
+    return true;
   }
 
   // ── Group container ───────────────────────────────────────────────────
@@ -456,11 +443,13 @@ function tryInject(): void {
   group.appendChild(tweaksBtn);
   group.appendChild(storeBtn);
   outer.appendChild(group);
+  updateStoreUpdateBadge(tweakStore.updateCount());
 
   state.navGroup = group;
   state.navButtons = { config: configBtn, tweaks: tweaksBtn, store: storeBtn };
   plog("nav group injected", { outerTag: outer.tagName });
   syncPagesGroup();
+  return true;
 }
 
 function sidebarGroupHeader(text: string, trailing?: HTMLElement): HTMLElement {
@@ -879,11 +868,11 @@ function applyNavActive(btn: HTMLButtonElement, active: boolean): void {
 
 // ─────────────────────────────────────────────────────────── activation ──
 
-function activatePage(page: ActivePage): void {
+function activatePage(page: ActivePage): boolean {
   const content = findContentArea();
   if (!content) {
     plog("activate: content area not found");
-    return;
+    return false;
   }
   state.activePage = page;
   plog("activate", { page });
@@ -924,6 +913,7 @@ function activatePage(page: ActivePage): void {
     state.sidebarRestoreHandler = handler;
     sidebar.addEventListener("click", handler, true);
   }
+  return true;
 }
 
 function restoreCodexView(): void {
@@ -1490,7 +1480,6 @@ function renderTweakStorePage(
   actions.className = settingsActionsClass;
   const refreshBtn = storeIconButton(refreshIconSvg(), "Refresh tweak store", () => {
     refreshBtn.disabled = true;
-    updateStoreUpdateBadge(null);
     grid.textContent = "";
     renderTweakStoreGhostGrid(grid);
     refreshTweakStoreGrid(grid, source, refreshBtn);
@@ -1504,8 +1493,9 @@ function renderTweakStorePage(
   const grid = document.createElement("div");
   grid.dataset.codexppStoreGrid = "true";
   grid.className = "grid gap-4";
-  if (state.tweakStore) {
-    grid.dataset.codexppStore = JSON.stringify(state.tweakStore);
+  const cached = tweakStore.current();
+  if (cached) {
+    grid.dataset.codexppStore = JSON.stringify(cached);
     renderTweakStoreGrid(grid, source);
   } else {
     renderTweakStoreGhostGrid(grid);
@@ -1521,7 +1511,7 @@ function refreshTweakStoreGrid(
   source: HTMLElement,
   refreshBtn?: HTMLButtonElement,
 ): void {
-  void getTweakStore(true)
+  void tweakStore.load(true)
     .then((store) => {
       grid.dataset.codexppStore = JSON.stringify(store);
       renderTweakStoreGrid(grid, source);
@@ -1530,7 +1520,6 @@ function refreshTweakStoreGrid(
       grid.dataset.codexppStore = "";
       grid.removeAttribute("aria-busy");
       source.textContent = "Live registry unavailable";
-      updateStoreUpdateBadge(null);
       grid.textContent = "";
       grid.appendChild(storeMessageCard("Could not load tweak store", String(e)));
     })
@@ -1540,33 +1529,9 @@ function refreshTweakStoreGrid(
 }
 
 function warmTweakStore(): void {
-  if (state.tweakStore || state.tweakStorePromise) return;
-  void getTweakStore().then((store) => {
-    updateStoreUpdateBadge(outdatedInstalledStoreCount(store.entries));
+  void tweakStore.load().catch(() => {
+    // The main process logs catalog failures; the Store page shows them.
   });
-}
-
-function getTweakStore(force = false): Promise<TweakStoreRegistryView> {
-  if (!force) {
-    if (state.tweakStore) return Promise.resolve(state.tweakStore);
-    if (state.tweakStorePromise) return state.tweakStorePromise;
-  }
-  state.tweakStoreError = null;
-  const promise = ipcRenderer
-    .invoke("codexpp:get-tweak-store")
-    .then((store) => {
-      state.tweakStore = store as TweakStoreRegistryView;
-      return state.tweakStore;
-    })
-    .catch((e) => {
-      state.tweakStoreError = e;
-      throw e;
-    })
-    .finally(() => {
-      if (state.tweakStorePromise === promise) state.tweakStorePromise = null;
-    });
-  state.tweakStorePromise = promise;
-  return promise;
 }
 
 function renderTweakStoreGrid(grid: HTMLElement, source: HTMLElement): void {
@@ -1575,7 +1540,6 @@ function renderTweakStoreGrid(grid: HTMLElement, source: HTMLElement): void {
   const entries = store.entries;
   grid.removeAttribute("aria-busy");
   source.textContent = `Refreshed ${new Date(store.fetchedAt).toLocaleString()}`;
-  updateStoreUpdateBadge(outdatedInstalledStoreCount(entries));
   grid.textContent = "";
   if (store.entries.length === 0) {
     grid.appendChild(storeMessageCard("No tweaks yet", "Use Publish Tweak to submit the first one."));
@@ -1663,7 +1627,7 @@ function tweakStoreCard(entry: TweakStoreEntryView): HTMLElement {
           card.className = tweakStoreCardClass(false);
           card.querySelector("[data-codexpp-store-update-label]")?.remove();
           versions.replaceChildren(tweakStoreVersionBadge(entry, entry.manifest.version));
-          updateStoreUpdateBadge(Math.max(0, currentStoreUpdateBadgeCount() - 1));
+          tweakStore.markInstalled(entry.id);
           setTimeout(() => {
             actions.replaceChildren(storeStatusPill("Installed"));
             if (grid && source) refreshTweakStoreGrid(grid, source);
@@ -1958,7 +1922,6 @@ function setSidebarCodexPlusPlusUpdateButton(check: CodexPlusPlusUpdateCheck | n
 function updateStoreUpdateBadge(count: number | null): void {
   const badge = document.querySelector<HTMLElement>("[data-codexpp-store-update-badge]");
   if (!badge) return;
-  badge.dataset.codexppStoreUpdateCount = count === null ? "" : String(count);
   applyStoreUpdateBadgeStyle(badge);
   badge.hidden = count === null || count <= 0;
   badge.textContent = count && count > 0 ? String(count) : "";
@@ -1970,21 +1933,6 @@ function updateStoreUpdateBadge(count: number | null): void {
 
 function applyStoreUpdateBadgeStyle(badge: HTMLElement): void {
   badge.className = metadataBadgeClass + " tabular-nums";
-}
-
-function currentStoreUpdateBadgeCount(): number {
-  const badge = document.querySelector<HTMLElement>("[data-codexpp-store-update-badge]");
-  const raw = badge?.dataset.codexppStoreUpdateCount;
-  const parsed = raw ? Number(raw) : 0;
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function outdatedInstalledStoreCount(entries: TweakStoreEntryView[]): number {
-  return entries.filter(hasStoreUpdate).length;
-}
-
-function hasStoreUpdate(entry: TweakStoreEntryView): boolean {
-  return entry.installed?.status === "update";
 }
 
 function storeToolbarButton(

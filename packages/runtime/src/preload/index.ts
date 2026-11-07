@@ -15,6 +15,7 @@ import { startSettingsInjector } from "./settings-injector";
 import { startTweakHost, teardownTweakHost } from "./tweak-host";
 import { mountManager } from "./manager";
 import { installHeaderBranding } from "./header-branding";
+import { installRailStoreButton } from "./rail-store-button";
 
 const BROWSER_UI_CONNECT_PORT = "codexpp:browser-ui-connect-app-host";
 const BROWSER_UI_BRIDGE_REQUEST = "codexpp:browser-ui-bridge-request";
@@ -99,6 +100,7 @@ async function boot() {
     installHeaderBranding();
     startSettingsInjector();
     fileLog("settings injector started");
+    installRailStoreButton();
     await startTweakHost();
     fileLog("tweak host started");
     await mountManager();

@@ -664,6 +664,11 @@ ipcMain.handle("codexpp:run-codexpp-update", async () => {
   throw new Error("Close Codex-DC after finishing active tasks, then run Setup → Update Codex-DC.");
 });
 
+// Codex's main process opens Settings by routing the window through its host
+// message channel, as its "Settings…" menu command does.
+ipcMain.handle("codexpp:open-settings", (event) => {
+  event.sender.send("codex_desktop:message-for-view", { type: "navigate-to-route", path: "/settings" });
+});
 
 ipcMain.handle("codexpp:get-tweak-store", async () => {
   const store = await fetchTweakStoreRegistry();
