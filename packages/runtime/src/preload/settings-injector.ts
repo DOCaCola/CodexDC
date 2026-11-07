@@ -1879,9 +1879,12 @@ function storeEntryIconUrl(entry: TweakStoreEntryView): string | null {
   const iconUrl = entry.manifest.iconUrl?.trim();
   if (!iconUrl) return null;
   if (/^(https?:|data:)/i.test(iconUrl)) return iconUrl;
+  // Relative icons live next to the manifest, so resolve them inside the
+  // entry's catalog directory at the approved commit.
   const rel = iconUrl.replace(/^\.?\//, "");
-  if (!rel || rel.startsWith("../")) return null;
-  return `https://raw.githubusercontent.com/${entry.repo}/${entry.approvedCommitSha}/${rel}`;
+  if (rel.split("/").some((part) => !part || part === "." || part === "..")) return null;
+  const dir = !entry.path || entry.path === "." ? "" : `${entry.path}/`;
+  return `https://raw.githubusercontent.com/${entry.repo}/${entry.approvedCommitSha}/${dir}${rel}`;
 }
 
 function sidebarUpdatePillButton(): HTMLButtonElement {
