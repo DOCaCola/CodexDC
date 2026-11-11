@@ -56,7 +56,7 @@ test("Store update wait ignores a registered package until its files are ready",
   let checks = 0;
   const progress: string[] = [];
   const result = await waitForNewStorePackage("OpenAI.Codex_publisher", "26.915.4065.0", {
-    timeoutMs: 100,
+    stallTimeoutMs: 100,
     pollMs: 1,
     query: () => {
       checks += 1;
@@ -74,13 +74,15 @@ test("Store update wait ignores a registered package until its files are ready",
 
 test("Store update wait reports the installed version while the update is pending", async () => {
   const progress: string[] = [];
+  let now = 0;
   await assert.rejects(
     waitForNewStorePackage("OpenAI.Codex_publisher", "26.915.4065.0", {
-      timeoutMs: 5,
+      stallTimeoutMs: 5,
       pollMs: 1,
       query: () => ({ version: "26.915.4065.0", installLocation: "C:\\WindowsApps\\Codex" }),
       queryStatus: () => null,
-      pause: async () => {},
+      pause: async () => { now += 1; },
+      now: () => now,
       onProgress: (message) => progress.push(message),
       progressIntervalMs: 0,
     }),
@@ -95,7 +97,7 @@ test("Store wait tracks download completion even when the installed version is u
   const progress: string[] = [];
   let statusChecks = 0;
   const result = await waitForNewStorePackage("OpenAI.Codex_publisher", installed.version, {
-    timeoutMs: 100,
+    stallTimeoutMs: 100,
     query: () => installed,
     queryStatus: () => ({
       state: ++statusChecks === 1 ? "Downloading" : "Completed",
@@ -116,7 +118,7 @@ test("Completed Store request still waits for installed package files", async ()
   let checks = 0;
   const installed = { version: "26.924.6891.0", installLocation: "C:\\WindowsApps\\Codex" };
   const result = await waitForNewStorePackage("OpenAI.Codex_publisher", installed.version, {
-    timeoutMs: 100,
+    stallTimeoutMs: 100,
     query: () => installed,
     queryStatus: () => {
       checks++;
@@ -136,4 +138,96 @@ test("Store wait reports failed and canceled operations immediately", async () =
       queryStatus: () => ({ state, percentComplete: 38, errorCode: "0x80070005" }),
     }), /Windows Store update (error|canceled).*0x80070005/);
   }
+});
+
+test("slow Store downloads keep waiting beyond fifteen minutes while fractional progress advances", async () => {
+  const minute = 60_000;
+  const installed = { version: "26.924.6891.0", installLocation: "C:\\WindowsApps\\Codex" };
+  let now = 0;
+  const result = await waitForNewStorePackage("OpenAI.Codex_publisher", installed.version, {
+    query: () => installed,
+    queryStatus: () => ({
+      state: now >= 30 * minute ? "Completed" : "Downloading",
+      // Even progress too small to change the displayed integer is activity.
+      percentComplete: now >= 30 * minute ? 100 : now / minute / 100,
+      errorCode: "",
+    }),
+    fileExists: () => true,
+    pause: async () => { now += minute; },
+    now: () => now,
+  });
+  assert.equal(result, installed);
+  assert.equal(now, 30 * minute);
+});
+
+test("Store wait times out fifteen minutes after download progress stops", async () => {
+  const minute = 60_000;
+  const installed = { version: "26.924.6891.0", installLocation: "C:\\WindowsApps\\Codex" };
+  let now = 0;
+  const progress: string[] = [];
+  await assert.rejects(waitForNewStorePackage("OpenAI.Codex_publisher", installed.version, {
+    query: () => installed,
+    queryStatus: () => ({
+      state: "Downloading",
+      percentComplete: Math.min(now / minute, 5),
+      errorCode: "",
+    }),
+    pause: async () => { now += minute; },
+    now: () => now,
+    onProgress: (message) => progress.push(message),
+    progressIntervalMs: 0,
+  }), /no progress for 900s; last status: Downloading: 5%/);
+  assert.equal(now, 20 * minute);
+  assert.ok(progress.length > 15, "periodic logging must not renew the timeout");
+});
+
+test("a new Store installation phase gets time to finish even when its percentage resets", async () => {
+  let now = 0;
+  const installed = { version: "26.924.6891.0", installLocation: "C:\\WindowsApps\\Codex" };
+  const result = await waitForNewStorePackage("OpenAI.Codex_publisher", installed.version, {
+    stallTimeoutMs: 10,
+    query: () => installed,
+    queryStatus: () => ({
+      state: now < 8 ? "Downloading" : now < 16 ? "Installing" : "Completed",
+      percentComplete: now < 8 ? 100 : now < 16 ? 0 : 100,
+      errorCode: "",
+    }),
+    fileExists: () => true,
+    pause: async () => { now += 4; },
+    now: () => now,
+  });
+  assert.equal(result, installed);
+  assert.equal(now, 16);
+});
+
+test("repeated Store phases and regressing percentages do not hide a stall", async () => {
+  let now = 0;
+  await assert.rejects(waitForNewStorePackage("OpenAI.Codex_publisher", "26.924.6891.0", {
+    stallTimeoutMs: 10,
+    query: () => null,
+    queryStatus: () => ({
+      state: now % 4 === 0 ? "Downloading" : "Pending",
+      percentComplete: now % 6 === 0 ? 50 : 40,
+      errorCode: "",
+    }),
+    pause: async () => { now += 2; },
+    now: () => now,
+  }), /Timed out waiting for Windows Store/);
+  assert.equal(now, 16);
+});
+
+test("new Store package registration renews the wait for its app files", async () => {
+  let now = 0;
+  const previousVersion = "26.924.6891.0";
+  const installed = { version: "26.925.6891.0", installLocation: "C:\\WindowsApps\\Codex" };
+  const result = await waitForNewStorePackage("OpenAI.Codex_publisher", previousVersion, {
+    stallTimeoutMs: 10,
+    query: () => now < 8 ? { ...installed, version: previousVersion } : installed,
+    queryStatus: () => null,
+    fileExists: () => now >= 16,
+    pause: async () => { now += 4; },
+    now: () => now,
+  });
+  assert.equal(result, installed);
+  assert.equal(now, 16);
 });

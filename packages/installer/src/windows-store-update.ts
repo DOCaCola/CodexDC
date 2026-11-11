@@ -25,7 +25,7 @@ const storeUpdateScript = resolve(
   "windows",
   "store-update.ps1",
 );
-const STORE_UPDATE_TIMEOUT_MS = 15 * 60_000;
+const STORE_UPDATE_STALL_TIMEOUT_MS = 15 * 60_000;
 const STORE_UPDATE_POLL_MS = 2_000;
 
 export function compareStoreVersions(left: string, right: string): number {
@@ -119,7 +119,7 @@ export async function waitForNewStorePackage(
   family: string,
   previousVersion: string,
   options: {
-    timeoutMs?: number;
+    stallTimeoutMs?: number;
     pollMs?: number;
     query?: (family: string) => StorePackage | null;
     queryStatus?: (family: string) => StoreInstallStatus | null;
@@ -127,19 +127,25 @@ export async function waitForNewStorePackage(
     pause?: (ms: number) => Promise<unknown>;
     onProgress?: (message: string) => void;
     progressIntervalMs?: number;
+    now?: () => number;
   } = {},
 ): Promise<StorePackage> {
   const query = options.query ?? queryInstalledStorePackage;
   const queryStatus = options.queryStatus ?? queryStoreInstallStatus;
   const fileExists = options.fileExists ?? existsSync;
   const pause = options.pause ?? delay;
-  const timeoutMs = options.timeoutMs ?? STORE_UPDATE_TIMEOUT_MS;
+  const stallTimeoutMs = options.stallTimeoutMs ?? STORE_UPDATE_STALL_TIMEOUT_MS;
   const pollMs = options.pollMs ?? STORE_UPDATE_POLL_MS;
-  const deadline = Date.now() + timeoutMs;
-  const startedAt = Date.now();
+  const now = options.now ?? (() => performance.now());
+  const startedAt = now();
+  let lastActivityAt = startedAt;
+  let latestVersion = previousVersion;
+  // Keep high-water marks so repeated status changes or percentage regressions
+  // cannot keep a stalled operation alive indefinitely.
+  const phaseProgress = new Map<string, number>();
   let lastProgressAt = 0;
   let lastObservedVersion: string | null = null;
-  while (Date.now() < deadline) {
+  while (true) {
     const installed = query(family);
     const observedVersion = installed?.version ?? "not registered";
     const newerVersion = installed
@@ -159,13 +165,32 @@ export async function waitForNewStorePackage(
       options.onProgress?.(`Windows Store completed the request; ${installed.version} is already installed`);
       return installed;
     }
-    const now = Date.now();
+    const observedAt = now();
+    if (installed && compareStoreVersions(installed.version, latestVersion) > 0) {
+      latestVersion = installed.version;
+      lastActivityAt = observedAt;
+    }
+    if (status) {
+      const previousProgress = phaseProgress.get(status.state);
+      if (previousProgress === undefined || status.percentComplete > previousProgress) {
+        phaseProgress.set(status.state, status.percentComplete);
+        lastActivityAt = observedAt;
+      }
+    }
+    const stalledMs = observedAt - lastActivityAt;
+    if (stalledMs >= stallTimeoutMs) {
+      const lastStatus = status ? `${status.state}: ${Math.floor(status.percentComplete)}%` : "status unavailable";
+      throw new Error(
+        `Timed out waiting for Windows Store to install ${family} after ${previousVersion}: ` +
+        `no progress for ${Math.floor(stalledMs / 1_000)}s; last status: ${lastStatus}; installed version: ${observedVersion}`,
+      );
+    }
     if (
       options.onProgress &&
       (observedVersion !== lastObservedVersion ||
-        now - lastProgressAt >= (options.progressIntervalMs ?? 15_000))
+        observedAt - lastProgressAt >= (options.progressIntervalMs ?? 15_000))
     ) {
-      const elapsed = Math.floor((now - startedAt) / 1_000);
+      const elapsed = Math.floor((observedAt - startedAt) / 1_000);
       options.onProgress(
         status && !newerVersion
           ? `Windows Store ${status.state}: ${Math.floor(status.percentComplete)}%; installed version: ${observedVersion} (${elapsed}s)`
@@ -174,11 +199,10 @@ export async function waitForNewStorePackage(
           : `Waiting for a newer Windows Store package; installed version: ${observedVersion} (${elapsed}s)`,
       );
       lastObservedVersion = observedVersion;
-      lastProgressAt = now;
+      lastProgressAt = observedAt;
     }
     await pause(pollMs);
   }
-  throw new Error(`Timed out waiting for Windows Store to install ${family} after ${previousVersion}`);
 }
 
 export async function installNewStorePackage(

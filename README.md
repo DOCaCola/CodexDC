@@ -104,6 +104,9 @@ are not subject to the release updater's hourly limit.
 There are no scheduled tasks, LaunchAgents or background maintenance services.
 
 Windows refreshes its managed copy from the installed Microsoft Store app.
+Store updates keep waiting while download or installation progress advances.
+They time out after 15 minutes without progress, reporting the last Store status
+in `log/windows-store-update.log`.
 On macOS, CodexDC checks the publisher's update feed and shows updates through
 its integrated desktop notification. The update action downloads the full app
 archive while CodexDC stays open, verifies its Ed25519 signature and publisher
