@@ -14,6 +14,7 @@ function fixture() {
     update: async (): Promise<UpdatedPackage | undefined> => { calls.push("update"); return undefined; },
     repair: async (force: boolean) => { calls.push(`repair:${force}`); },
     updateBackend: async () => { calls.push("backend"); },
+    needsRepair: (state: InstallerState) => state.version !== CODEXDC_VERSION,
     log: (message: string) => { calls.push(`log:${message}`); },
     report: (error: unknown) => { calls.push(`report:${String(error)}`); },
   };
@@ -31,6 +32,13 @@ test("opening an already-running desktop does not update or repair it", async ()
   f.services.isRunning = () => true;
   await maintainBeforeLaunch(true, f.services);
   assert.deepEqual(f.calls, ["log:CodexDC is already running; skipping update and repair checks."]);
+});
+
+test("changed startup assets force a repair even when the version number is unchanged", async () => {
+  const f = fixture();
+  f.services.needsRepair = () => true;
+  await maintainBeforeLaunch(false, f.services);
+  assert.deepEqual(f.calls, ["repair:true", "backend"]);
 });
 
 test("successful update hands launch to the new package without repairing through the old package", async () => {

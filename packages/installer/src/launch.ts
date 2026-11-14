@@ -11,9 +11,16 @@ import { launchMacDesktop } from "./mac-desktop-launch.js";
 import { launchWindowsDesktop } from "./windows-desktop-launch.js";
 import { waitForProcessExit } from "./commands/repair-after-exit.js";
 import { CODEXDC_VERSION } from "./version.js";
+import { guardWindowsLaunch } from "./windows-launch-guard.js";
 
 export async function launchManaged(): Promise<void> {
   console.log(kleur.bold(`CodexDC ${CODEXDC_VERSION}`));
+  if (process.platform === "win32") {
+    const paths = userPaths();
+    const state = readState(paths.stateFile);
+    if (!state) throw new Error("Install CodexDC first.");
+    if (!guardWindowsLaunch(state, await prepareBackend(), paths.root)) return;
+  }
   if (process.platform === "darwin" && process.env.CODEXDC_LAUNCH_PARENT !== undefined) {
     const pid = Number(process.env.CODEXDC_LAUNCH_PARENT);
     if (!Number.isSafeInteger(pid) || pid <= 0 || pid === process.pid) throw new Error("Invalid launch parent process id");

@@ -74,6 +74,14 @@ This version omits custom build suffixes such as `-doca`. **Use <version>** swit
 back to the previous fork version.
 The bundled executable and system PATH are not replaced.
 
+On Windows, direct launches also apply the saved CLI selection before Codex starts.
+The managed app opts out of Windows automatic application restart. When opening a
+shortcut, CodexDC checks the loaded runtime and actual backend of existing desktops.
+If an instance is unpatched, outdated, or cannot be verified, a warning offers
+**Kill and start CodexDC** and **Cancel**. Cancel is the default. Killing interrupts
+active work; CodexDC never assumes an unknown instance is idle. Terminal CLI sessions
+and shared CLI daemons are not launch targets.
+
 The Windows fork release includes hpatch, sandbox helpers, the code-mode host and
 ripgrep. Its Mac package is not yet available; Mac users must select **Desktop bundled (stock)**
 or **Local path** in Setup before installing. There is no automatic fallback.

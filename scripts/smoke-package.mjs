@@ -20,11 +20,18 @@ try {
   execFileSync(node, ["--input-type=module", "-e", `
     import assert from "node:assert/strict";
     import { createRequire } from "node:module";
+    import { existsSync } from "node:fs";
     import { join } from "node:path";
     import { pathToFileURL } from "node:url";
     const require = createRequire(import.meta.url);
     const { stageAssets } = await import(pathToFileURL(process.argv[1]));
     stageAssets(process.argv[2]);
+    assert.equal(existsSync(join(process.argv[2], "desktop-bootstrap.js")), true);
+    if (process.platform === "win32") {
+      const restart = require(join(process.argv[2], "native", "codexdc_windows_restart.node"));
+      restart.unregisterRestart();
+      assert.equal(restart.getRestartRegistration(), null);
+    }
     const { findUpdaterSharedState } = require(join(process.argv[2], "platform", "updater-discovery.js"));
     const { attachManager } = require(join(process.argv[2], "platform", "macos", "index.js"));
     const manager = { getIsUpdateReady: () => false, installUpdatesIfAvailable() {} };
@@ -35,6 +42,34 @@ try {
     assert.equal(manager.hasUpdater(), true);
     assert.equal(manager.getUnavailableReason(), null);
   `, installModule, runtime], options);
+  if (process.platform === "win32") {
+    execFileSync(node, ["--input-type=module", "-e", `
+      import assert from "node:assert/strict";
+      import { mkdirSync, writeFileSync } from "node:fs";
+      import { join } from "node:path";
+      import { pathToFileURL } from "node:url";
+      const { guardWindowsLaunch } = await import(pathToFileURL(process.argv[1]));
+      const root = process.argv[2];
+      mkdirSync(join(root, "app", "resources"), { recursive: true });
+      writeFileSync(join(root, "app", "ChatGPT.exe"), "fixture");
+      let rows = [{
+        pid: 123, parentPid: 1, executable: join(root, "app", "ChatGPT.exe"),
+        commandLine: "", startedAt: new Date().toISOString(), name: "ChatGPT.exe",
+      }];
+      let kills = 0;
+      const deps = {
+        inspect: () => rows, confirm: () => false, identifyDesktop: () => true,
+        readLoaded: () => null,
+        kill: () => { kills++; rows = []; },
+      };
+      const state = { appRoot: join(root, "app") };
+      assert.equal(guardWindowsLaunch(state, { provider: "bundled" }, root, deps), false);
+      assert.equal(kills, 0);
+      deps.confirm = () => true;
+      assert.equal(guardWindowsLaunch(state, { provider: "bundled" }, root, deps), true);
+      assert.equal(kills, 1);
+    `, join(stage, "packages", "installer", "dist", "windows-launch-guard.js"), profile], options);
+  }
   // Exercise the updater from the extracted release, without requesting an update.
   const storeUpdateModule = join(stage, "packages", "installer", "dist", "windows-store-update.js");
   execFileSync(node, ["--input-type=module", "-e", `

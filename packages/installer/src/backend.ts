@@ -5,6 +5,8 @@ import { dirname, join, resolve } from "node:path";
 import { userPaths } from "./paths.js";
 import { CODEXDC_VERSION } from "./version.js";
 import { downloadReleaseAsset, expectedChecksum, extractPackage, latestRelease, releaseAsset, verifyChecksum, type Release } from "./releases.js";
+import { backendEnvironment } from "@codexdc/sdk/dist/backend-selection.js";
+export { backendEnvironment } from "@codexdc/sdk/dist/backend-selection.js";
 
 export const CLI_REPO = "DOCaCola/codex";
 export interface BackendPackage { tag: string; releaseId: number; version: string; executable: string; digest: string }
@@ -36,24 +38,6 @@ export function setBackendAutoUpdate(enabled: boolean, root = userPaths().root):
   const state = backendState(root);
   save({ ...state, autoUpdate: enabled, updateCheck: undefined }, root);
   return backendState(root);
-}
-
-export function backendEnvironment(state: BackendState, inherited: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const env = { ...inherited };
-  delete env.CODEX_CLI_PATH;
-  if (state.provider === "fork") {
-    if (!state.installed || !existsSync(state.installed.executable)) {
-      throw new Error("The selected DC fork CLI is missing. Reinstall it or explicitly select the desktop-bundled CLI.");
-    }
-    env.CODEX_CLI_PATH = state.installed.executable;
-  }
-  if (state.provider === "development") {
-    if (!state.development || !existsSync(state.development.executable)) {
-      throw new Error("The local CLI is missing. Rebuild it or select another CLI backend.");
-    }
-    env.CODEX_CLI_PATH = state.development.executable;
-  }
-  return env;
 }
 
 export function selectBackend(provider: string, root = userPaths().root): BackendState {

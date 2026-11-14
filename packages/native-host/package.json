@@ -3,7 +3,7 @@
   "version": "1.0.10",
   "private": true,
   "type": "module",
-  "description": "macOS native AppKit/Metal host for CodexDC Owl bridge",
+  "description": "CodexDC native bridges for macOS AppKit/Metal and Windows application restart",
   "scripts": {
     "build": "node scripts/build.mjs"
   },

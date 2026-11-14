@@ -1,6 +1,10 @@
 import kleur from "kleur";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import asar from "@electron/asar";
+import { desktopFingerprint } from "@codexdc/sdk/dist/desktop-fingerprint.js";
+import type { InstallerState } from "./state.js";
 import { ensureUserPaths } from "./paths.js";
 import { readState } from "./state.js";
 import { isCodexRunning } from "./alerts.js";
@@ -15,6 +19,7 @@ const maintenance = {
   update: () => updatePackage({ onLaunch: true }),
   repair: (force: boolean) => repair({ force }),
   updateBackend: updateBackendBeforeLaunch,
+  needsRepair: (state: InstallerState) => managedStartupNeedsRepair(state),
   log: console.log,
   report: (error: unknown) => {
     const message = `Patcher update was not applied: ${String(error)}`;
@@ -43,6 +48,19 @@ export async function maintainBeforeLaunch(
       services.report(error);
     }
   }
-  await services.repair(state.version !== CODEXDC_VERSION);
+  await services.repair(services.needsRepair(state));
   await services.updateBackend();
+}
+
+export function managedStartupNeedsRepair(state: InstallerState): boolean {
+  if (state.version !== CODEXDC_VERSION) return true;
+  if (process.platform !== "win32") return false;
+  const assets = fileURLToPath(new URL("../assets/", import.meta.url));
+  const expected = desktopFingerprint(join(assets, "runtime"), readFileSync(join(assets, "loader.cjs")));
+  try {
+    const installedLoader = asar.extractFile(join(state.appRoot, "resources", "app.asar"), "codexdc-loader.cjs");
+    return desktopFingerprint(ensureUserPaths().runtime, installedLoader) !== expected;
+  } catch {
+    return true; // Missing or incomplete installed startup code needs a full repair.
+  }
 }

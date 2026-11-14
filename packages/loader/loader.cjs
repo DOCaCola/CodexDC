@@ -10,9 +10,8 @@
  *   2. Hook `require` so renderer preloads can find our runtime.
  *   3. Load the runtime's main-process entry BEFORE the original main entry.
  *      The runtime patches the host's BrowserWindow to inject our preload script.
- *   4. Load the original main entry. If anything in our pipeline throws, log
- *      it but always fall through to the original main so Codex still launches
- *      (broken tweak system > broken Codex).
+ *   4. Load the original main entry. Optional tweak failures do not block it.
+ *      Required Windows backend preparation must succeed before that handoff.
  */
 
 "use strict";
@@ -60,6 +59,19 @@ if (process.platform === "darwin" && process.env.CODEXDC_DESKTOP_READY !== "1") 
   return;
 }
 delete process.env.CODEXDC_DESKTOP_READY;
+
+if (process.platform === "win32") {
+  try {
+    require(path.join(userRoot, "runtime", "desktop-bootstrap.js")).prepareDesktop(userRoot);
+  } catch (error) {
+    const message = String(error && error.message || error);
+    process.stderr.write(`[codexdc] Desktop preparation failed: ${message}\n`);
+    const { app, dialog } = require("electron");
+    dialog.showErrorBox("CodexDC could not start", `${message}\n\nRun CodexDC Setup to repair the installation or select another CLI backend.`);
+    app.exit(1);
+    return;
+  }
+}
 
 function appendCappedLog(file, line) {
   const incoming = Buffer.from(line);

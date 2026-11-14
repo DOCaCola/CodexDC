@@ -11,6 +11,11 @@ const out = resolve(outDir, "codexpp_native_host.node");
 
 mkdirSync(outDir, { recursive: true });
 
+if (process.platform === "win32") {
+  await import("./build-windows.mjs");
+  process.exit(0);
+}
+
 if (process.platform !== "darwin") {
   console.log("[native-host] skipping macOS native host build on non-darwin platform");
   process.exit(0);

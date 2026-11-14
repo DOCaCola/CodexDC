@@ -43,5 +43,16 @@ await build({
 
 console.log("[bundle] preload + main bundled");
 
+await build({
+  entryPoints: [resolve(root, "src/desktop-bootstrap.ts")],
+  bundle: true,
+  outfile: resolve(root, "dist/desktop-bootstrap.js"),
+  platform: "node",
+  target: "node20",
+  format: "cjs",
+  external: ["electron"],
+  logLevel: "info",
+});
+
 const { cpSync } = await import("node:fs");
 cpSync(resolve(root, "platform"), resolve(root, "dist/platform"), { recursive: true });

@@ -6,7 +6,7 @@ import path from "node:path";
 import test from "node:test";
 
 const source = readFileSync(new URL("../loader.cjs", import.meta.url), "utf8").split("function appendCappedLog")[0]!;
-function run(platform: string, ready?: string) {
+function run(platform: string, ready?: string, bootstrapFails = false) {
   const child = new EventEmitter() as EventEmitter & { unref: () => void };
   let unreferenced = false;
   child.unref = () => { unreferenced = true; };
@@ -33,6 +33,13 @@ function run(platform: string, ready?: string) {
       case "node:module": return {};
       case "./package.json": return { __codexpp: { userRoot: "/profile" } };
       case "node:child_process": return { spawn: (...args: unknown[]) => { calls.push(args); return child; } };
+      case path.join("/profile", "runtime", "desktop-bootstrap.js"): return {
+        prepareDesktop: () => { if (bootstrapFails) throw new Error("selected CLI is missing"); },
+      };
+      case "electron": return {
+        app: { exit: (code: number) => exits.push(code) },
+        dialog: { showErrorBox: (_title: string, message: string) => errors.push(message) },
+      };
       default: throw new Error(id);
     }
   };
@@ -72,4 +79,10 @@ test("Windows launch continues directly", () => {
   const r = run("win32");
   assert.equal(r.continued, true);
   assert.equal(r.calls.length, 0);
+});
+test("Windows preparation failure shows an error and never hands off to upstream Codex", () => {
+  const r = run("win32", undefined, true);
+  assert.equal(r.continued, undefined);
+  assert.deepEqual(r.exits, [1]);
+  assert.match(r.errors.join("\n"), /selected CLI is missing/);
 });
