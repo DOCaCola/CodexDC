@@ -1,7 +1,11 @@
-param([ValidateSet('inspect', 'confirm', 'kill')][string]$Action)
+param([ValidateSet('inspect', 'confirm', 'kill', 'error')][string]$Action)
 $ErrorActionPreference = 'Stop'
 $session = (Get-Process -Id $PID).SessionId
 $owner = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+
+if ($Action -in @('inspect', 'kill')) {
+    Add-Type -Path (Join-Path $PSScriptRoot 'windows-process-control.cs')
+}
 
 function Get-DesktopProcesses {
     $rows = @(Get-CimInstance Win32_Process -Filter "SessionId = $session")
@@ -13,12 +17,21 @@ function Get-DesktopProcesses {
             commandLine = [string]$_.CommandLine
             startedAt = $_.CreationDate.ToUniversalTime().ToString('o')
             name = [string]$_.Name
+            elevated = if ($_.Name -ieq 'codex.exe' -or $_.CommandLine -match '(?:^|\s)app-server(?:\s|$)') {
+                [CodexDC.ProcessControl]::ReadElevation([int]$_.ProcessId)
+            } else { $null }
         }
     })
 }
 
 if ($Action -eq 'inspect') {
-    ConvertTo-Json -InputObject @(Get-DesktopProcesses) -Compress
+    # This helper inherits the launcher's token. Inspect the token, not account membership.
+    $launcherElevated = [CodexDC.ProcessControl]::ReadElevation($PID)
+    if ($null -eq $launcherElevated) { throw 'Could not determine CodexDC launcher elevation.' }
+    [pscustomobject]@{
+        launcherElevated = [bool]$launcherElevated
+        processes = @(Get-DesktopProcesses)
+    } | ConvertTo-Json -Depth 3 -Compress
     exit 0
 }
 
@@ -58,6 +71,17 @@ if ($Action -eq 'confirm') {
     exit 0
 }
 
+if ($Action -eq 'error') {
+    Add-Type -AssemblyName System.Windows.Forms
+    $null = [System.Windows.Forms.MessageBox]::Show(
+        [Environment]::GetEnvironmentVariable('CODEXDC_LAUNCH_ERROR'),
+        'CodexDC could not start',
+        [System.Windows.Forms.MessageBoxButtons]::OK,
+        [System.Windows.Forms.MessageBoxIcon]::Error
+    )
+    exit 0
+}
+
 # The JSON comes from the inspected snapshot, never from a process name wildcard.
 $targets = @([Environment]::GetEnvironmentVariable('CODEXDC_LAUNCH_TARGETS') | ConvertFrom-Json)
 $rows = @(Get-CimInstance Win32_Process -Filter "SessionId = $session")
@@ -87,21 +111,41 @@ try {
         }
     }
     foreach ($row in $selected.Values) {
-        $sid = (Invoke-CimMethod -InputObject $row -MethodName GetOwnerSid).Sid
-        if ($sid -ne $owner) { throw "Cannot terminate another user's Codex process." }
         try { $process = [System.Diagnostics.Process]::GetProcessById([int]$row.ProcessId) }
         catch [System.ArgumentException] { continue }
         # Hold verified process handles: an exited PID must not redirect a kill.
-        $null = $process.Handle
+        try { $null = $process.Handle }
+        catch {
+            # A snapshot entry may have exited before its handle was opened.
+            $process.Dispose()
+            if (!(Get-CimInstance Win32_Process -Filter "ProcessId = $($row.ProcessId)")) { continue }
+            throw
+        }
         $handles.Add($process)
+        if ($process.HasExited) { continue }
         # CIM reports microseconds; the held process handle reports 100ns ticks.
         if ([Math]::Abs($process.StartTime.ToUniversalTime().Ticks - $row.CreationDate.ToUniversalTime().Ticks) -gt 9) {
             throw "A process changed during launch. No process was terminated."
         }
+        try { $sid = [CodexDC.ProcessControl]::OwnerSid($process.Handle) }
+        catch {
+            if ($process.WaitForExit(1000)) { continue }
+            throw
+        }
+        if ($sid -ne $owner) { throw "Cannot terminate another user's Codex process." }
     }
     # Stop the roots first so they cannot keep creating new work.
     foreach ($process in @($handles | Sort-Object { if ($targets.pid -contains $_.Id) { 0 } else { 1 } })) {
-        if (!$process.HasExited) { $process.Kill() }
+        try {
+            if (!$process.HasExited) { [CodexDC.ProcessControl]::Terminate($process.Handle) }
+        } catch {
+            # Owl's sandbox helpers can exit as soon as the root is killed.
+            # The held handle distinguishes exit from a live denial and avoids
+            # .NET Kill reopening a possibly recycled PID.
+            if (!$process.WaitForExit(1000)) {
+                throw "Cannot terminate Codex process $($process.Id): $($_.Exception.Message)"
+            }
+        }
     }
     foreach ($process in $handles) {
         if (!$process.WaitForExit(10000)) { throw "A Codex process did not exit. Launch cancelled." }

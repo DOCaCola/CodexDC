@@ -48,7 +48,7 @@ try {
       import { mkdirSync, writeFileSync } from "node:fs";
       import { join } from "node:path";
       import { pathToFileURL } from "node:url";
-      const { guardWindowsLaunch } = await import(pathToFileURL(process.argv[1]));
+      const { guardWindowsLaunch, findLaunchConflicts } = await import(pathToFileURL(process.argv[1]));
       const root = process.argv[2];
       mkdirSync(join(root, "app", "resources"), { recursive: true });
       writeFileSync(join(root, "app", "ChatGPT.exe"), "fixture");
@@ -58,7 +58,7 @@ try {
       }];
       let kills = 0;
       const deps = {
-        inspect: () => rows, confirm: () => false, identifyDesktop: () => true,
+        inspect: () => ({ processes: rows, launcherElevated: false }), confirm: () => false, identifyDesktop: () => true,
         readLoaded: () => null,
         kill: () => { kills++; rows = []; },
       };
@@ -68,6 +68,22 @@ try {
       deps.confirm = () => true;
       assert.equal(guardWindowsLaunch(state, { provider: "bundled" }, root, deps), true);
       assert.equal(kills, 1);
+      const desktop = {
+        pid: 100, parentPid: 1, executable: join(root, "app", "ChatGPT.exe"),
+        commandLine: "", startedAt: "2026-11-14T09:00:00Z", name: "ChatGPT.exe", elevated: true,
+      };
+      const backend = {
+        pid: 101, parentPid: 100, executable: join(root, "cli", "codex.exe"),
+        commandLine: "codex.exe app-server", startedAt: "2026-11-14T09:00:01Z", name: "codex.exe", elevated: false,
+      };
+      const expected = { executable: desktop.executable, backend: backend.executable, runtimeHash: "fixture", launcherElevated: true };
+      const loaded = () => ({
+        pid: desktop.pid, executable: desktop.executable, reportedAt: "2026-11-14T09:00:02Z", runtimeHash: "fixture",
+      });
+      const conflicts = findLaunchConflicts([desktop, backend], expected, loaded);
+      assert.equal(conflicts.length, 1);
+      assert.match(conflicts[0].reason, /CLI backend is not elevated/);
+      assert.deepEqual(findLaunchConflicts([desktop, { ...backend, elevated: true }], expected, loaded), []);
     `, join(stage, "packages", "installer", "dist", "windows-launch-guard.js"), profile], options);
   }
   // Exercise the updater from the extracted release, without requesting an update.

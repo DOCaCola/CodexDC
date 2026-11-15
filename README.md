@@ -81,6 +81,10 @@ If an instance is unpatched, outdated, or cannot be verified, a warning offers
 **Kill and start CodexDC** and **Cancel**. Cancel is the default. Killing interrupts
 active work; CodexDC never assumes an unknown instance is idle. Terminal CLI sessions
 and shared CLI daemons are not launch targets.
+When the shortcut is run as administrator, this check also verifies the actual CLI
+backend's Windows token. A non-elevated backend (or one whose elevation cannot be
+verified) triggers the same warning, so restarting can apply the launcher's elevated
+token. The desktop shell's elevation alone does not satisfy this check.
 
 The Windows fork release includes hpatch, sandbox helpers, the code-mode host and
 ripgrep. Its Mac package is not yet available; Mac users must select **Desktop bundled (stock)**

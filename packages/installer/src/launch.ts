@@ -12,14 +12,25 @@ import { launchWindowsDesktop } from "./windows-desktop-launch.js";
 import { waitForProcessExit } from "./commands/repair-after-exit.js";
 import { CODEXDC_VERSION } from "./version.js";
 import { guardWindowsLaunch } from "./windows-launch-guard.js";
+import { logWindowsLaunch, withWindowsLaunchDiagnostics } from "./windows-launch-diagnostics.js";
 
 export async function launchManaged(): Promise<void> {
+  if (process.platform === "win32") return withWindowsLaunchDiagnostics(launchManagedDesktop);
+  return launchManagedDesktop();
+}
+
+async function launchManagedDesktop(): Promise<void> {
   console.log(kleur.bold(`CodexDC ${CODEXDC_VERSION}`));
   if (process.platform === "win32") {
     const paths = userPaths();
     const state = readState(paths.stateFile);
     if (!state) throw new Error("Install CodexDC first.");
-    if (!guardWindowsLaunch(state, await prepareBackend(), paths.root)) return;
+    logWindowsLaunch("Checking running desktop, backend and elevation");
+    if (!guardWindowsLaunch(state, await prepareBackend(), paths.root)) {
+      logWindowsLaunch("Launch cancelled");
+      return;
+    }
+    logWindowsLaunch("Launch guard completed; starting maintenance");
   }
   if (process.platform === "darwin" && process.env.CODEXDC_LAUNCH_PARENT !== undefined) {
     const pid = Number(process.env.CODEXDC_LAUNCH_PARENT);
@@ -38,6 +49,7 @@ export async function launchManaged(): Promise<void> {
   const state = readState(paths.stateFile);
   if (!state) throw new Error("Install CodexDC first.");
   const backend = await prepareBackend();
+  if (process.platform === "win32") logWindowsLaunch("Maintenance completed; preparing the desktop launch");
   console.log(`CLI backend: ${describeBackend(backend)}`);
   const env = backendEnvironment(backend, process.env);
   const executable = process.platform === "darwin"
@@ -59,6 +71,7 @@ export async function launchManaged(): Promise<void> {
     ? launchWindowsDesktop(executable, args, env)
     : spawn(executable, args, { env, cwd: dirname(executable), detached: true, stdio: "ignore" });
   await new Promise<void>((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
+  if (process.platform === "win32") logWindowsLaunch(`Desktop spawned: PID ${child.pid}, executable ${executable}`);
   child.unref();
 }
 

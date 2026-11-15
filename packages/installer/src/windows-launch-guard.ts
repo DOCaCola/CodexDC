@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, type ExecFileSyncOptionsWithStringEncoding } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +15,12 @@ export interface DesktopProcess {
   commandLine: string;
   startedAt: string;
   name: string;
+  elevated: boolean | null;
+}
+
+export interface WindowsLaunchSnapshot {
+  launcherElevated: boolean;
+  processes: DesktopProcess[];
 }
 
 interface LoadedDesktop {
@@ -30,19 +36,31 @@ export interface LaunchConflict {
 }
 
 const assets = fileURLToPath(new URL("../assets/", import.meta.url));
+export function windowsGuardProcessOptions(action: string, extraEnv: NodeJS.ProcessEnv = {}): ExecFileSyncOptionsWithStringEncoding {
+  return {
+    env: { ...process.env, ...extraEnv }, encoding: "utf8",
+    // SW_HIDE also hides the first WinForms dialog, not just the console.
+    windowsHide: action !== "confirm" && action !== "error",
+    // The user controls how long the confirmation dialog stays open.
+    ...(["confirm", "error"].includes(action) ? {} : { timeout: 30_000 }), maxBuffer: 4 * 1024 * 1024,
+  };
+}
+
 const nativeGuard = (action: string, extraEnv: NodeJS.ProcessEnv = {}) => execFileSync("powershell.exe", [
   "-NoProfile", "-NonInteractive", "-STA", "-ExecutionPolicy", "Bypass",
   "-File", join(assets, "windows-launch-guard.ps1"), action,
-], {
-  env: { ...process.env, ...extraEnv }, encoding: "utf8", windowsHide: true,
-  // The user controls how long the confirmation dialog stays open.
-  ...(action === "confirm" ? {} : { timeout: 30_000 }), maxBuffer: 4 * 1024 * 1024,
-}).trim();
+], windowsGuardProcessOptions(action, extraEnv)).trim();
+
+export function inspectWindowsLaunch(): WindowsLaunchSnapshot {
+  const snapshot = JSON.parse(nativeGuard("inspect")) as WindowsLaunchSnapshot;
+  if (typeof snapshot.launcherElevated !== "boolean" || !Array.isArray(snapshot.processes)) {
+    throw new Error("Could not inspect running Codex instances.");
+  }
+  return snapshot;
+}
 
 export function inspectWindowsProcesses(): DesktopProcess[] {
-  const rows: unknown = JSON.parse(nativeGuard("inspect"));
-  if (!Array.isArray(rows)) throw new Error("Could not inspect running Codex instances.");
-  return rows as DesktopProcess[];
+  return inspectWindowsLaunch().processes;
 }
 
 const samePath = (a: string, b: string) => win32.normalize(a).toLowerCase() === win32.normalize(b).toLowerCase();
@@ -57,7 +75,7 @@ function isCodexDesktop(file: string): boolean {
 
 export function findLaunchConflicts(
   processes: DesktopProcess[],
-  expected: { executable: string; backend: string; runtimeHash: string },
+  expected: { executable: string; backend: string; runtimeHash: string; launcherElevated: boolean },
   readLoaded: (pid: number) => LoadedDesktop | null,
   identifyDesktop: (executable: string) => boolean = isCodexDesktop,
 ): LaunchConflict[] {
@@ -88,6 +106,10 @@ export function findLaunchConflicts(
           /(?:^|\s)app-server(?:\s|$)/.test(row.commandLine) && !/(?:^|\s)--managed-daemon(?:\s|$)/.test(row.commandLine));
         if (servers.length !== 1 || !samePath(servers[0]!.executable, expected.backend)) {
           reason = "The running instance is using a different CLI backend, or its backend cannot be verified.";
+        } else if (expected.launcherElevated && servers[0]!.elevated !== true) {
+          reason = servers[0]!.elevated === false
+            ? "CodexDC was launched as administrator, but its Codex CLI backend is not elevated. Restarting CodexDC will start the backend as administrator."
+            : "CodexDC was launched as administrator, but its Codex CLI backend elevation cannot be verified. Restarting CodexDC will start the backend as administrator.";
         }
       }
     }
@@ -97,7 +119,7 @@ export function findLaunchConflicts(
 }
 
 const services = {
-  inspect: inspectWindowsProcesses,
+  inspect: inspectWindowsLaunch,
   confirm: (conflicts: LaunchConflict[]) => nativeGuard("confirm", {
     CODEXDC_LAUNCH_WARNING: [
       "CodexDC needs to replace an existing Codex instance before starting.",
@@ -136,7 +158,11 @@ export function guardWindowsLaunch(
     backend: backendEnvironment(backend, {}).CODEX_CLI_PATH ?? join(state.appRoot, "resources", "codex.exe"),
     runtimeHash: desktopFingerprint(join(assets, "runtime"), readFileSync(join(assets, "loader.cjs"))),
   };
-  const find = () => findLaunchConflicts(deps.inspect(), expected, pid => deps.readLoaded(userRoot, pid), deps.identifyDesktop);
+  const find = () => {
+    const snapshot = deps.inspect();
+    return findLaunchConflicts(snapshot.processes, { ...expected, launcherElevated: snapshot.launcherElevated },
+      pid => deps.readLoaded(userRoot, pid), deps.identifyDesktop);
+  };
   const conflicts = find();
   if (!conflicts.length) return true;
   if (!deps.confirm(conflicts)) return false;
