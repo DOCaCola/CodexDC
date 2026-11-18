@@ -8,7 +8,7 @@ import { runInNewContext } from "node:vm";
 
 const require = createRequire(import.meta.url);
 
-function fixture(cached: boolean, supported = true, chunked = false) {
+function fixture(cached: boolean, supported = true, chunked = false, failFirstCheck = false) {
   const messages: string[] = [];
   const warnings: string[] = [];
   const logs: string[] = [];
@@ -17,13 +17,18 @@ function fixture(cached: boolean, supported = true, chunked = false) {
   let preparations = 0;
   let quits = 0;
   let updateReady = false;
+  let updateLifecycle = "idle";
+  let checks = 0;
+  let online = true;
+  const powerMonitor = new EventEmitter();
+  const retries = new Map<object, { callback: () => Promise<void>; delay: number }>();
   const manager = {
     getIsUpdateReady: () => updateReady,
     setUpdateReady: (ready: boolean) => { updateReady = ready; },
     installUpdatesIfAvailable: async () => { throw new Error("Native install must not run"); },
     initializeMacSparkle: async () => { nativeInitializations++; },
     setDownloadProgressPercent() {},
-    setUpdateLifecycleState() {},
+    setUpdateLifecycleState(state: string) { updateLifecycle = state; },
   };
   const singleton = supported ? {
     I: Function("manager", "return function(){ return { appUpdates: manager, setSparkleBridgeHandlers() {} }; }")(manager),
@@ -54,10 +59,16 @@ function fixture(cached: boolean, supported = true, chunked = false) {
     };
     if (name === "electron") return {
       app,
+      net: { isOnline: () => online },
+      powerMonitor,
       dialog: { showMessageBox: async (options: { detail: string }) => { messages.push(options.detail); } },
     };
     if (name === "node:child_process") return {
-      execFile: (_file: string, _args: string[], _options: unknown, callback: Function) => {
+      execFile: (_file: string, args: string[], _options: unknown, callback: Function) => {
+        if (args[1] === "mac-update" && ++checks === 1 && failFirstCheck) {
+          callback(new Error("fetch failed"), "", "fetch failed");
+          return;
+        }
         callback(null, JSON.stringify({ ready: false, online: { version: "next" } }), "");
       },
       spawn: () => {
@@ -73,7 +84,13 @@ function fixture(cached: boolean, supported = true, chunked = false) {
   runInNewContext(readFileSync(new URL("../../runtime/platform/macos/index.js", import.meta.url), "utf8"), {
     module, require: fakeRequire,
     process: { env: { CODEXDC_USER_ROOT: "/user" }, pid: 123 },
-    setInterval: () => ({ unref() {} }), clearInterval() {}, setTimeout, clearTimeout,
+    setInterval: () => ({ unref() {} }), clearInterval() {},
+    setTimeout: (callback: () => Promise<void>, delay: number) => {
+      const handle = { unref() {} };
+      retries.set(handle, { callback, delay });
+      return handle;
+    },
+    clearTimeout: (handle: object) => retries.delete(handle),
   });
   module.exports.start({ log: {
     info: (message: string) => logs.push(message),
@@ -91,8 +108,38 @@ function fixture(cached: boolean, supported = true, chunked = false) {
     chunk.modules[35915]({ exports: {} });
   };
   return { manager, moduleLoader, messages, warnings, logs, loads, loadDesktopWindow, executeChunk, filename,
+    app, powerMonitor, retries, setOnline: (value: boolean) => { online = value; }, checks: () => checks,
+    updateLifecycle: () => updateLifecycle,
     counts: () => ({ nativeInitializations, preparations, quits }) };
 }
+
+test("a failed background check waits through sleep and offline wake, then marks the update ready", async () => {
+  const state = fixture(true, true, false, true);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(state.manager.getIsUpdateReady(), false);
+  assert.equal(state.updateLifecycle(), "idle");
+  assert.deepEqual(Array.from(state.retries.values(), retry => retry.delay), [15_000]);
+
+  state.setOnline(false);
+  state.powerMonitor.emit("suspend");
+  assert.equal(state.retries.size, 0);
+  state.powerMonitor.emit("resume");
+  assert.equal(state.checks(), 1);
+  assert.deepEqual(Array.from(state.retries.values(), retry => retry.delay), [15_000]);
+
+  await Array.from(state.retries.values())[0]!.callback();
+  assert.equal(state.checks(), 1);
+  assert.deepEqual(Array.from(state.retries.values(), retry => retry.delay), [15_000]);
+
+  state.setOnline(true);
+  await Array.from(state.retries.values())[0]!.callback();
+  assert.equal(state.checks(), 2);
+  assert.equal(state.manager.getIsUpdateReady(), true);
+  assert.equal(state.updateLifecycle(), "ready");
+  assert.equal(state.retries.size, 0);
+  state.app.emit("will-quit");
+  assert.equal(state.powerMonitor.listenerCount("resume"), 0);
+});
 
 for (const cached of [false, true]) {
   test(`macOS attaches to a ${cached ? "cached" : "newly loaded"} Rspack chunk before native initialization`, async () => {

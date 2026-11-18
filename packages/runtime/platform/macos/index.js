@@ -1,6 +1,73 @@
 "use strict";
 const { createUpdaterObserver, isUpdaterModulePath } = require("../updater-discovery.js");
 
+const CHECK_INTERVAL_MS = 5 * 60 * 1000;
+const FIRST_RETRY_MS = 15 * 1000;
+
+function startBackgroundChecks({ check, isOnline, powerMonitor, onError }) {
+  let suspended = false;
+  let stopped = false;
+  let checking = false;
+  let retryDelay = 0;
+  let retryTimer;
+
+  function clearRetry() {
+    clearTimeout(retryTimer);
+    retryTimer = undefined;
+  }
+
+  function scheduleRetry(delay) {
+    retryDelay = delay;
+    if (suspended || stopped) return;
+    retryTimer = setTimeout(poll, retryDelay);
+    retryTimer.unref();
+  }
+
+  async function poll() {
+    if (stopped || checking) return;
+    clearRetry();
+    // A timer can fire during a maintenance wake, before networking is usable.
+    if (suspended || !isOnline()) {
+      scheduleRetry(FIRST_RETRY_MS);
+      return;
+    }
+    checking = true;
+    try {
+      await check();
+      retryDelay = 0;
+    } catch (error) {
+      onError(error);
+      scheduleRetry(Math.min(Math.max(retryDelay * 2, FIRST_RETRY_MS), CHECK_INTERVAL_MS));
+    } finally {
+      checking = false;
+    }
+  }
+
+  const suspend = () => {
+    suspended = true;
+    clearRetry();
+  };
+  const resume = () => {
+    suspended = false;
+    if (retryDelay) {
+      retryDelay = 0;
+      void poll();
+    }
+  };
+  powerMonitor.on("suspend", suspend);
+  powerMonitor.on("resume", resume);
+  const interval = setInterval(poll, CHECK_INTERVAL_MS);
+  interval.unref();
+  void poll();
+  return () => {
+    stopped = true;
+    clearInterval(interval);
+    clearRetry();
+    powerMonitor.removeListener("suspend", suspend);
+    powerMonitor.removeListener("resume", resume);
+  };
+}
+
 function attachManager(manager, services) {
   let ready = false;
   let installing = false;
@@ -8,6 +75,8 @@ function attachManager(manager, services) {
   const refresh = () => checkInFlight ??= services.check().then(result => {
     ready = result.ready || !!result.online;
     manager.setUpdateReady(ready);
+    // The desktop's update indicator follows the lifecycle state.
+    if (!installing) manager.setUpdateLifecycleState(ready ? "ready" : "idle");
     return result;
   }).finally(() => { checkInFlight = null; });
   manager.getIsUpdateReady = () => ready;
@@ -83,7 +152,7 @@ function start(api) {
   const path = require("node:path");
   const Module = require("node:module");
   const { execFile, spawn } = require("node:child_process");
-  const { app, dialog } = require("electron");
+  const { app, dialog, net, powerMonitor } = require("electron");
   const root = process.env.CODEXDC_USER_ROOT;
   const state = JSON.parse(fs.readFileSync(path.join(root, "state.json"), "utf8"));
   const cli = path.join(state.sourceRoot, "packages/installer/dist/cli.js");
@@ -137,12 +206,17 @@ function start(api) {
       message: message => dialog.showMessageBox({ type: "info", message, buttons: ["OK"] }),
       error: showError,
     });
-    const poll = () => {
-      confirmStartup();
-      return refresh().catch(error => api.log.warn("macOS update check failed", error));
-    };
     app.whenReady().then(() => {
-      poll();
+      const stopChecks = startBackgroundChecks({
+        check: () => {
+          confirmStartup();
+          return refresh();
+        },
+        isOnline: () => net.isOnline(),
+        powerMonitor,
+        onError: error => api.log.warn("macOS update check failed", error),
+      });
+      app.once("will-quit", stopChecks);
       const resultPath = path.join(root, "mac-update-result.json");
       if (fs.existsSync(resultPath)) {
         const result = JSON.parse(fs.readFileSync(resultPath, "utf8"));
@@ -150,9 +224,6 @@ function start(api) {
         if (result.error) void showError(result.error);
       }
     });
-    const timer = setInterval(poll, 5 * 60 * 1000);
-    timer.unref();
-    app.once("will-quit", () => clearInterval(timer));
     api.log.info("macOS managed update bridge attached");
   });
   const original = Module._load;
