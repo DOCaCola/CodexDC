@@ -10,6 +10,7 @@ static napi_status (NAPI_CDECL *set_property)(napi_env, napi_value, const char *
 static napi_status (NAPI_CDECL *create_object)(napi_env, napi_value *);
 static napi_status (NAPI_CDECL *create_string)(napi_env, const char16_t *, size_t, napi_value *);
 static napi_status (NAPI_CDECL *create_number)(napi_env, uint32_t, napi_value *);
+static napi_status (NAPI_CDECL *get_boolean)(napi_env, bool, napi_value *);
 static napi_status (NAPI_CDECL *get_null)(napi_env, napi_value *);
 static napi_status (NAPI_CDECL *get_undefined)(napi_env, napi_value *);
 static napi_status (NAPI_CDECL *throw_error)(napi_env, const char *, const char *);
@@ -53,6 +54,24 @@ static napi_value get_registration(napi_env env, napi_callback_info info) {
   return value;
 }
 
+static napi_value is_process_elevated(napi_env env, napi_callback_info info) {
+  (void)info;
+  HANDLE token;
+  if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+    return fail(env, "OpenProcessToken", HRESULT_FROM_WIN32(GetLastError()));
+  }
+  TOKEN_ELEVATION elevation;
+  DWORD size;
+  BOOL ok = GetTokenInformation(token, TokenElevation, &elevation, sizeof(elevation), &size);
+  DWORD error = ok ? ERROR_SUCCESS : GetLastError();
+  CloseHandle(token);
+  if (!ok) return fail(env, "GetTokenInformation", HRESULT_FROM_WIN32(error));
+
+  napi_value value;
+  get_boolean(env, elevation.TokenIsElevated != 0, &value);
+  return value;
+}
+
 NAPI_MODULE_INIT() {
   HMODULE host = GetModuleHandleW(L"chrome.dll");
   if (!host) host = GetModuleHandleW(NULL);
@@ -62,6 +81,7 @@ NAPI_MODULE_INIT() {
   RESOLVE(create_object, "napi_create_object");
   RESOLVE(create_string, "napi_create_string_utf16");
   RESOLVE(create_number, "napi_create_uint32");
+  RESOLVE(get_boolean, "napi_get_boolean");
   RESOLVE(get_null, "napi_get_null");
   RESOLVE(get_undefined, "napi_get_undefined");
   RESOLVE(throw_error, "napi_throw_error");
@@ -71,5 +91,7 @@ NAPI_MODULE_INIT() {
   set_property(env, exports, "unregisterRestart", function);
   create_function(env, "getRestartRegistration", NAPI_AUTO_LENGTH, get_registration, NULL, &function);
   set_property(env, exports, "getRestartRegistration", function);
+  create_function(env, "isProcessElevated", NAPI_AUTO_LENGTH, is_process_elevated, NULL, &function);
+  set_property(env, exports, "isProcessElevated", function);
   return exports;
 }

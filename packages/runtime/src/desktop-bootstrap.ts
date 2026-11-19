@@ -1,4 +1,4 @@
-import { app } from "electron";
+import { app, ipcMain } from "electron";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { savedBackendEnvironment } from "@codexdc/sdk/dist/backend-selection.js";
@@ -20,6 +20,7 @@ export function prepareDesktop(userRoot: string): void {
       require("node:fs").appendFileSync(join(dir, "launch.log"), `[${new Date().toISOString()}] [${level}] ${message}\n`);
     },
   });
+  ipcMain.handle("codexdc:desktop-elevated", () => policy.isProcessElevated());
   // This records the loaded runtime, not just the patch currently on disk.
   const runtimeHash = desktopFingerprint(runtime, readFileSync(join(app.getAppPath(), "codexdc-loader.cjs")));
   const instances = join(userRoot, "desktop-instances");

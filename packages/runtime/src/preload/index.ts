@@ -97,7 +97,7 @@ queueMicrotask(() => {
 async function boot() {
   fileLog("boot start", { readyState: document.readyState });
   try {
-    installHeaderBranding();
+    void installHeaderBranding().catch((error) => fileLog("header branding FAILED", String(error)));
     startSettingsInjector();
     fileLog("settings injector started");
     installRailStoreButton();

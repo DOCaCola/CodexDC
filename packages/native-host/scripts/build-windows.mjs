@@ -41,7 +41,7 @@ execFileSync(join(vc, "bin/Hostx64/x64/cl.exe"), [
   "/nologo", "/LD", "/O2", "/MT", "/W4", "/DNAPI_VERSION=8",
   `/Fo${join(out, "windows_restart.obj")}`,
   join(root, "packages/native-host/src/windows_restart.c"),
-  "/link", "/Brepro", `/OUT:${join(out, "codexdc_windows_restart.node")}`, `/IMPLIB:${join(out, "windows_restart.lib")}`,
+  "/link", "advapi32.lib", "/Brepro", `/OUT:${join(out, "codexdc_windows_restart.node")}`, `/IMPLIB:${join(out, "windows_restart.lib")}`,
 ], { env, cwd: out, stdio: "inherit" });
 console.log("[native-host] built Windows restart bridge");
 
