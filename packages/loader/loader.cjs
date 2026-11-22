@@ -30,35 +30,49 @@ const MAX_LOG_BYTES = 10 * 1024 * 1024;
 // Keep the desktop as the bundle executable for macOS privacy attribution.
 // Maintenance waits for this first host to exit before refreshing the app.
 if (process.platform === "darwin" && process.env.CODEXDC_DESKTOP_READY !== "1") {
+  try {
+    startMacMaintenance();
+  } catch (error) {
+    reportMacLaunchFailure(error);
+  }
+  return;
+}
+delete process.env.CODEXDC_DESKTOP_READY;
+
+function startMacMaintenance() {
   const launch = JSON.parse(fs.readFileSync(path.join(process.resourcesPath, "codexdc-launch.json"), "utf8"));
   // Finder launches have no terminal; keep the maintenance output inspectable.
   const logDir = path.join(userRoot, "log");
   fs.mkdirSync(logDir, { recursive: true });
   const output = fs.openSync(path.join(logDir, "launch.log"), "a");
-  fs.writeSync(output, `\n[${new Date().toISOString()}] launch\n`);
-  const child = require("node:child_process").spawn(launch.maintenanceNode, [launch.maintenanceCli, "launch"], {
-    detached: true,
-    stdio: ["ignore", output, output],
-    env: {
-      ...process.env,
-      CODEXDC_HOME: userRoot,
-      CODEXDC_LAUNCH_PARENT: String(process.pid),
-      CODEXDC_DESKTOP_ARGS: JSON.stringify(process.argv.slice(1)),
-    },
-  });
-  child.once("error", (error) => {
+  try {
+    fs.writeSync(output, `\n[${new Date().toISOString()}] launch\n`);
+    const child = require("node:child_process").spawn(launch.maintenanceNode, [launch.maintenanceCli, "launch"], {
+      detached: true,
+      stdio: ["ignore", output, output],
+      env: {
+        ...process.env,
+        CODEXDC_HOME: userRoot,
+        CODEXDC_LAUNCH_PARENT: String(process.pid),
+        CODEXDC_DESKTOP_ARGS: JSON.stringify(process.argv.slice(1)),
+      },
+    });
+    child.once("error", reportMacLaunchFailure);
+    child.once("spawn", () => {
+      child.unref();
+      process.exit(0);
+    });
+  } finally {
     fs.closeSync(output);
-    process.stderr.write(`[codexdc] Could not start launch maintenance: ${error.message}\n`);
-    process.exit(1);
-  });
-  child.once("spawn", () => {
-    fs.closeSync(output);
-    child.unref();
-    process.exit(0);
-  });
-  return;
+  }
 }
-delete process.env.CODEXDC_DESKTOP_READY;
+
+function reportMacLaunchFailure(error) {
+  const message = `Could not start launch maintenance: ${error.message}`;
+  process.stderr.write(`[codexdc] ${message}\n`);
+  require("electron").dialog.showErrorBox("CodexDC could not start", message);
+  process.exit(1);
+}
 
 if (process.platform === "win32") {
   try {

@@ -4,9 +4,21 @@ import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { readPlist } from "./plist.js";
 import { locateCodex } from "./platform.js";
+import { userPaths } from "./paths.js";
 import { getOpenReport, type OpenReport } from "./commands/debug.js";
 
 const CODEX_BUNDLE_ID = "com.openai.codex";
+
+export function showLaunchFailedAlert(error: unknown): void {
+  const message = error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOSPC"
+    ? "There is not enough free disk space to prepare CodexDC. Free some space and open CodexDC again."
+    : error instanceof Error ? error.message : String(error);
+  showAlert({
+    title: "CodexDC could not start",
+    message: `${message}\n\nLaunch log: ${join(userPaths().logDir, "launch.log")}`,
+    critical: true,
+  });
+}
 
 export function showRepairFailedAlert(errorMessage: string): void {
   showAlert({

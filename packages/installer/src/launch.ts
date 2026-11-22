@@ -1,4 +1,4 @@
-import { spawn, execFileSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import kleur from "kleur";
@@ -32,17 +32,21 @@ async function launchManagedDesktop(): Promise<void> {
     }
     logWindowsLaunch("Launch guard completed; starting maintenance");
   }
-  if (process.platform === "darwin" && process.env.CODEXDC_LAUNCH_PARENT !== undefined) {
+  const checkForUpdate = process.env.CODEXDC_LAUNCH_CHECKED !== "1";
+  if (process.platform === "darwin" && checkForUpdate && process.env.CODEXDC_LAUNCH_PARENT !== undefined) {
     const pid = Number(process.env.CODEXDC_LAUNCH_PARENT);
     if (!Number.isSafeInteger(pid) || pid <= 0 || pid === process.pid) throw new Error("Invalid launch parent process id");
-    delete process.env.CODEXDC_LAUNCH_PARENT;
     await waitForProcessExit(pid, { timeoutMs: 30_000 });
   }
-  const next = await maintainBeforeLaunch(process.env.CODEXDC_LAUNCH_CHECKED !== "1");
+  const next = await maintainBeforeLaunch(checkForUpdate);
   if (next) {
-    execFileSync(next.node,
+    const result = spawnSync(next.node,
       [join(next.root, "packages", "installer", "dist", "cli.js"), "launch"],
       { env: { ...process.env, CODEXDC_LAUNCH_CHECKED: "1" }, stdio: "inherit" });
+    if (result.error) throw result.error;
+    if (result.status === null) throw new Error(`Launch maintenance stopped (${result.signal}).`);
+    // The new maintenance process reports its own launch errors.
+    process.exitCode = result.status;
     return;
   }
   const paths = userPaths();
@@ -62,6 +66,7 @@ async function launchManagedDesktop(): Promise<void> {
   if (!Array.isArray(args) || !args.every((arg) => typeof arg === "string")) throw new Error("Invalid desktop launch arguments");
   delete env.CODEXDC_DESKTOP_ARGS;
   delete env.CODEXDC_LAUNCH_CHECKED;
+  delete env.CODEXDC_LAUNCH_PARENT;
   console.log(`Starting desktop${state.codexVersion ? ` (Codex ${state.codexVersion})` : ""}: ${state.appRoot}`);
   if (process.platform === "darwin") {
     launchMacDesktop(state.appRoot, args, env);

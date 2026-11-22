@@ -24,7 +24,7 @@ import { browserUi } from "./commands/browser-ui.js";
 import { doctor } from "./commands/doctor.js";
 import { safeMode } from "./commands/safe-mode.js";
 import { CODEXDC_VERSION } from "./version.js";
-import { showRepairFailedAlert } from "./alerts.js";
+import { showLaunchFailedAlert, showRepairFailedAlert } from "./alerts.js";
 import { capKnownLogFiles } from "./logging.js";
 
 interface InstallCliOpts {
@@ -49,19 +49,24 @@ function wrap<T extends (...args: never[]) => unknown | Promise<unknown>>(fn: T)
   return ((...args: Parameters<T>) => {
     Promise.resolve()
       .then(() => fn(...args))
-      .catch((e: unknown) => {
-        const msg = e instanceof Error ? e.message : String(e);
-        if (e instanceof AppRunningError) {
-          console.error(msg);
-          process.exit(1);
-        }
-        console.error("\n" + kleur.red().bold("✗ codexdc failed"));
-        console.error(msg);
-        console.error("");
-        maybeShowRepairFailedAlert(msg);
-        process.exit(1);
-      });
+      .catch(failCommand);
   }) as unknown as T;
+}
+
+function failCommand(error: unknown): never {
+  const message = error instanceof Error ? error.message : String(error);
+  const appRunning = error instanceof AppRunningError;
+  if (!appRunning) console.error("\n" + kleur.red().bold("✗ codexdc failed"));
+  console.error(message);
+  if (!appRunning) console.error("");
+
+  const command = process.argv[2];
+  if (command === "launch" && process.env.CODEXDC_LAUNCH_PARENT !== undefined) {
+    showLaunchFailedAlert(error);
+  } else if (command === "repair" && !appRunning) {
+    showRepairFailedAlert(message);
+  }
+  process.exit(1);
 }
 
 function runInstall(opts: InstallCliOpts): Promise<void> {
@@ -105,13 +110,11 @@ async function runDevTweak(target: string | undefined, opts: never): Promise<voi
   return devTweak(target, opts);
 }
 
-function maybeShowRepairFailedAlert(message: string): void {
-  const command = process.argv[2];
-  if (command !== "repair") return;
-  showRepairFailedAlert(message);
+try {
+  forwardToActivePackage(findSourceRoot(dirname(fileURLToPath(import.meta.url))));
+} catch (error) {
+  failCommand(error);
 }
-
-forwardToActivePackage(findSourceRoot(dirname(fileURLToPath(import.meta.url))));
 
 const prog = sade("codexdc")
   .version(CODEXDC_VERSION)
