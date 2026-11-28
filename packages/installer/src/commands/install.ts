@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { locateCodex, type CodexInstall } from "../platform.js";
 import { ensureUserPaths } from "../paths.js";
 import { backupOnce, patchAsar, readFileInAsar, readHeaderHash } from "../asar.js";
+import { patchActivityImagePreviews } from "../activity-image-previews.js";
 import { prepareIntegrityUpdate } from "../integrity.js";
 import { clearQuarantine, prepareCodeSigning, signCodexApp } from "../codesign.js";
 import { readPlist } from "../plist.js";
@@ -123,7 +124,7 @@ export async function install(opts: Opts = {}): Promise<void> {
     codex.asarPath,
     paths.root,
     codex.appUserModelId,
-    step.detail,
+    step,
   );
   const { headerHash: patchedAsarHash } = readHeaderHash(codex.asarPath);
   step.detail(`Patched app.asar (entry was ${kleur.dim(originalEntry)})`);
@@ -256,7 +257,7 @@ async function injectLoader(
   asarPath: string,
   userRoot: string,
   appUserModelId: string | null | undefined,
-  step: (msg: string) => void = () => {},
+  step: Stepper,
 ): Promise<string> {
   let originalMain = "";
   await patchAsar(asarPath, (dir) => {
@@ -304,8 +305,16 @@ async function injectLoader(
       cpSync(loaderSrc, join(dir, "codexdc-loader.cjs"));
     }
 
-    patchCodexWindowServices(dir, originalMain, step);
-    patchWindowsShellHarness(dir, step);
+    patchCodexWindowServices(dir, originalMain, step.detail);
+    patchWindowsShellHarness(dir, step.detail);
+    const activityPreviews = patchActivityImagePreviews(dir);
+    if (activityPreviews.status === "unsupported") {
+      step(`Skipped activity image preview patch (${activityPreviews.reason})`);
+    } else {
+      step.detail(activityPreviews.status === "applied"
+        ? "Patched activity image previews"
+        : "Detected existing activity image preview patch");
+    }
   });
   return originalMain;
 }
